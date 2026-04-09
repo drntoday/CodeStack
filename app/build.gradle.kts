@@ -25,7 +25,7 @@ android {
 
 dependencies {
     // The "Chef" - Google Gemini AI
-    implementation("google.ai.client.generativeai:generativeai:0.2.2")
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     
     // The "Interface" - Jetpack Compose
     implementation("androidx.activity:activity-compose:1.8.2")
