@@ -22,8 +22,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import com.google.firebase.ai.FirebaseAI
-import com.google.firebase.ai.GenerativeBackend
+// UPDATED 2026 IMPORTS
+import com.google.firebase.Firebase
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.content
 
 data class ChatMessage(val text: String, val isUser: Boolean)
@@ -52,7 +54,6 @@ fun CodeStackApp() {
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Auto-scroll logic
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
@@ -61,7 +62,7 @@ fun CodeStackApp() {
         var tempKey by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("Setup CodeStack") },
+            title = { Text("CodeStack Setup") },
             text = {
                 OutlinedTextField(
                     value = tempKey,
@@ -77,7 +78,7 @@ fun CodeStackApp() {
                         apiKey = tempKey
                         showApiKeyDialog = false
                     }
-                }) { Text("Start Chatting") }
+                }) { Text("Join Chat") }
             }
         )
     }
@@ -90,16 +91,16 @@ fun CodeStackApp() {
         inputText = ""
         isGenerating = true
         val aiIndex = messages.size
-        messages.add(ChatMessage("Typing...", isUser = false))
+        messages.add(ChatMessage("Analyzing...", isUser = false))
 
         scope.launch {
             try {
-                // NEW 2026 INITIALIZATION: Using Firebase AI Logic SDK
-                // This points to the stable production backend
-                val model = FirebaseAI.getInstance(GenerativeBackend.vertexAI())
-                    .generativeModel(modelName = "gemini-1.5-flash")
+                // NEW 2026 INITIALIZATION
+                // Use the Firebase AI Logic SDK with the Vertex AI backend
+                val model = Firebase.ai(
+                    backend = GenerativeBackend.vertexAI(apiKey = apiKey)
+                ).generativeModel(modelName = "gemini-1.5-flash")
                 
-                // Clear the "Typing..." placeholder
                 messages[aiIndex] = ChatMessage("", isUser = false)
 
                 model.generateContentStream(userText).collect { chunk ->
@@ -115,14 +116,7 @@ fun CodeStackApp() {
     }
 
     Scaffold(
-        topBar = { 
-            CenterAlignedTopAppBar(
-                title = { Text("CodeStack AI") },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) 
-        },
+        topBar = { TopAppBar(title = { Text("CodeStack AI") }) },
         bottomBar = {
             Surface(tonalElevation = 8.dp) {
                 Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -130,7 +124,7 @@ fun CodeStackApp() {
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask Somnath's AI...") },
+                        placeholder = { Text("Ask Gemini...") },
                         enabled = !isGenerating,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { sendMessage() })
@@ -145,7 +139,7 @@ fun CodeStackApp() {
         LazyColumn(
             state = listState, 
             modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(messages) { msg ->
