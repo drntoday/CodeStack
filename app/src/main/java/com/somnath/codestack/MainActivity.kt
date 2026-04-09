@@ -27,6 +27,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.content
+import com.google.firebase.ai.type.RequestOptions
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
