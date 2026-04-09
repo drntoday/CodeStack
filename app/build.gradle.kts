@@ -37,13 +37,14 @@ android {
 }
 
 dependencies {
-    // Import the BoM for the Firebase platform
+    // Import the BoM (Manager) for the Firebase platform
+    // Version 34.11.0 is the latest stable release as of April 2026
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
-    
-    // The NEW library that replaces the old 0.9.0 version
-    implementation("com.google.firebase:firebase-vertexai")
 
-    // UI Essentials
+    // The NEW 2026 library: Firebase AI Logic (formerly vertexai)
+    implementation("com.google.firebase:firebase-ai")
+
+    // UI & Essentials (Keeping these stable for your Vivo Y30)
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
@@ -52,3 +53,4 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 }
+
