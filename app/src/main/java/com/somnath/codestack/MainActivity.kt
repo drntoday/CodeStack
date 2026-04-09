@@ -19,8 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-
-// CORRECT GOOGLE AI SDK IMPORTS (2026 Stable)
+// STABLE 2026 GOOGLE AI SDK IMPORTS
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 
@@ -50,22 +49,17 @@ fun CodeStackApp() {
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Auto-scroll logic
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
-    }
-
+    // Dialog for API Key
     if (showApiKeyDialog) {
         var tempKey by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("Gemini AI Setup") },
+            title = { Text("CodeStack AI Setup") },
             text = {
                 OutlinedTextField(
                     value = tempKey,
                     onValueChange = { tempKey = it },
-                    label = { Text("Enter API Key") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Enter Gemini API Key") }
                 )
             },
             confirmButton = {
@@ -75,38 +69,37 @@ fun CodeStackApp() {
                         apiKey = tempKey
                         showApiKeyDialog = false
                     }
-                }) { Text("Start Chatting") }
+                }) { Text("Save & Start") }
             }
         )
     }
 
     fun sendMessage() {
+        if (inputText.isBlank() || isGenerating) return
         val userText = inputText.trim()
-        if (userText.isEmpty() || isGenerating) return
-
-        messages.add(ChatMessage(userText, isUser = true))
+        
+        messages.add(ChatMessage(userText, true))
         inputText = ""
         isGenerating = true
         val aiIndex = messages.size
-        messages.add(ChatMessage("Gemini is thinking...", isUser = false))
+        messages.add(ChatMessage("Thinking...", false))
 
         scope.launch {
             try {
-                // Initializing the Google AI Model directly
+                // FIXED 2026 CONSTRUCTOR:
+                // GenerativeModel(modelName, apiKey)
                 val model = GenerativeModel(
-                    modelName = "gemini-1.5-flash",
+                    modelName = "gemini-2.5-flash-lite", 
                     apiKey = apiKey
                 )
                 
-                messages[aiIndex] = ChatMessage("", isUser = false)
-
-                // Streaming the response for a "typing" effect
+                messages[aiIndex] = ChatMessage("", false)
                 model.generateContentStream(userText).collect { chunk ->
                     val currentText = messages[aiIndex].text
                     messages[aiIndex] = messages[aiIndex].copy(text = currentText + (chunk.text ?: ""))
                 }
             } catch (e: Exception) {
-                messages[aiIndex] = ChatMessage("Error: ${e.localizedMessage}", isUser = false)
+                messages[aiIndex] = ChatMessage("Error: ${e.localizedMessage}", false)
             } finally {
                 isGenerating = false
             }
@@ -114,24 +107,19 @@ fun CodeStackApp() {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("CodeStack AI") }) },
+        topBar = { TopAppBar(title = { Text("CodeStack") }) },
         bottomBar = {
             Surface(tonalElevation = 8.dp) {
-                Row(
-                    modifier = Modifier.padding(8.dp).fillMaxWidth().imePadding(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask anything...") },
-                        enabled = !isGenerating,
-                        shape = RoundedCornerShape(24.dp)
+                        placeholder = { Text("Ask Gemini...") },
+                        enabled = !isGenerating
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = { sendMessage() }, enabled = !isGenerating && inputText.isNotBlank()) {
-                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                    IconButton(onClick = { sendMessage() }) {
+                        Icon(Icons.Default.Send, "Send", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -143,9 +131,7 @@ fun CodeStackApp() {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(messages) { msg ->
-                ChatBubble(msg)
-            }
+            items(messages) { ChatBubble(it) }
         }
     }
 }
@@ -154,19 +140,12 @@ fun CodeStackApp() {
 fun ChatBubble(msg: ChatMessage) {
     val alignment = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
     val color = if (msg.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = color),
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Text(text = msg.text, modifier = Modifier.padding(12.dp), fontSize = 15.sp)
+    Box(Modifier.fillMaxWidth(), contentAlignment = alignment) {
+        Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = color)) {
+            Text(msg.text, Modifier.padding(12.dp))
         }
     }
 }
 
-private fun saveApiKey(c: Context, k: String) = 
-    c.getSharedPreferences("prefs", 0).edit().putString("key", k).apply()
-
-private fun getApiKey(c: Context) = 
-    c.getSharedPreferences("prefs", 0).getString("key", "") ?: ""
+private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("prefs", 0).edit().putString("key", k).apply()
+private fun getApiKey(c: Context) = c.getSharedPreferences("prefs", 0).getString("key", "") ?: ""
