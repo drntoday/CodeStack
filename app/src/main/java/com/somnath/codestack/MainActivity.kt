@@ -22,14 +22,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
+import com.google.firebase.ai.FirebaseAI
+import com.google.firebase.ai.GenerativeBackend
+import com.google.firebase.ai.type.content
 
-// --- Data Model ---
-data class ChatMessage(
-    val text: String,
-    val isUser: Boolean
-)
+data class ChatMessage(val text: String, val isUser: Boolean)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,48 +47,37 @@ fun CodeStackApp() {
     
     var apiKey by remember { mutableStateOf(getApiKey(context)) }
     var showApiKeyDialog by remember { mutableStateOf(apiKey.isEmpty()) }
-
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
+    // Auto-scroll logic
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
-        }
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
     if (showApiKeyDialog) {
         var tempKey by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("Setup API Key") },
+            title = { Text("Setup CodeStack") },
             text = {
-                Column {
-                    Text("Enter your Gemini API Key to start.", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.size(8.dp))
-                    OutlinedTextField(
-                        value = tempKey,
-                        onValueChange = { tempKey = it },
-                        label = { Text("API Key") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                OutlinedTextField(
+                    value = tempKey,
+                    onValueChange = { tempKey = it },
+                    label = { Text("Enter Gemini API Key") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (tempKey.isNotEmpty()) {
-                            saveApiKey(context, tempKey)
-                            apiKey = tempKey
-                            showApiKeyDialog = false
-                        }
+                Button(onClick = {
+                    if (tempKey.isNotBlank()) {
+                        saveApiKey(context, tempKey)
+                        apiKey = tempKey
+                        showApiKeyDialog = false
                     }
-                ) {
-                    Text("Save")
-                }
+                }) { Text("Start Chatting") }
             }
         )
     }
@@ -103,29 +89,25 @@ fun CodeStackApp() {
         messages.add(ChatMessage(userText, isUser = true))
         inputText = ""
         isGenerating = true
-
         val aiIndex = messages.size
-        messages.add(ChatMessage("", isUser = false))
+        messages.add(ChatMessage("Typing...", isUser = false))
 
         scope.launch {
             try {
-                val generativeModel = GenerativeModel(
-                    modelName = "gemini-1.5-flash-001",
-                    apiKey = apiKey
-                )
-
-                val chatHistory = messages.dropLast(1).map { msg ->
-                    content(role = if (msg.isUser) "user" else "model") { text(msg.text) }
-                }
-
-                val chat = generativeModel.startChat(history = chatHistory)
+                // NEW 2026 INITIALIZATION: Using Firebase AI Logic SDK
+                // This points to the stable production backend
+                val model = FirebaseAI.getInstance(GenerativeBackend.vertexAI())
+                    .generativeModel(modelName = "gemini-1.5-flash")
                 
-                chat.sendMessageStream(userText).collect { chunk ->
-                    val currentMsg = messages[aiIndex]
-                    messages[aiIndex] = currentMsg.copy(text = currentMsg.text + (chunk.text ?: ""))
+                // Clear the "Typing..." placeholder
+                messages[aiIndex] = ChatMessage("", isUser = false)
+
+                model.generateContentStream(userText).collect { chunk ->
+                    val currentText = messages[aiIndex].text
+                    messages[aiIndex] = messages[aiIndex].copy(text = currentText + (chunk.text ?: ""))
                 }
             } catch (e: Exception) {
-                messages[aiIndex] = messages[aiIndex].copy(text = "Error: ${e.message}")
+                messages[aiIndex] = ChatMessage("System Error: ${e.localizedMessage}", isUser = false)
             } finally {
                 isGenerating = false
             }
@@ -133,30 +115,26 @@ fun CodeStackApp() {
     }
 
     Scaffold(
-        topBar = {
+        topBar = { 
             CenterAlignedTopAppBar(
-                title = { Text("CodeStack") },
+                title = { Text("CodeStack AI") },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
-            )
+            ) 
         },
         bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Surface(tonalElevation = 8.dp) {
+                Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask Gemini...") },
+                        placeholder = { Text("Ask Somnath's AI...") },
                         enabled = !isGenerating,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { sendMessage() })
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = { sendMessage() }, enabled = !isGenerating && inputText.isNotBlank()) {
                         Icon(Icons.Default.Send, contentDescription = "Send")
                     }
@@ -164,47 +142,33 @@ fun CodeStackApp() {
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(messages) { message ->
-                    MessageBubble(message)
-                }
+        LazyColumn(
+            state = listState, 
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(messages) { msg ->
+                ChatBubble(msg)
             }
         }
     }
 }
 
 @Composable
-fun MessageBubble(message: ChatMessage) {
-    val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
-    val color = if (message.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer
-    val textColor = if (message.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-
+fun ChatBubble(msg: ChatMessage) {
+    val alignment = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
+    val color = if (msg.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(12.dp), 
             colors = CardDefaults.cardColors(containerColor = color),
-            modifier = Modifier.widthIn(max = 300.dp)
+            modifier = Modifier.widthIn(max = 280.dp)
         ) {
-            Text(text = message.text, modifier = Modifier.padding(12.dp), color = textColor)
+            Text(text = msg.text, modifier = Modifier.padding(12.dp), fontSize = 15.sp)
         }
     }
 }
 
-private const val PREFS_NAME = "CodeStackPrefs"
-private const val KEY_API_KEY = "gemini_api_key"
-
-fun saveApiKey(context: Context, key: String) {
-    val sharedPref = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    sharedPref.edit().putString(KEY_API_KEY, key).apply()
-}
-
-fun getApiKey(context: Context): String {
-    val sharedPref = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    return sharedPref.getString(KEY_API_KEY, "") ?: ""
-}
+private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("prefs", 0).edit().putString("key", k).apply()
+private fun getApiKey(c: Context) = c.getSharedPreferences("prefs", 0).getString("key", "") ?: ""
