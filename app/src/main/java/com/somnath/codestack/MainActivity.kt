@@ -94,15 +94,16 @@ fun CodeStackApp() {
         val aiIndex = messages.size
         messages.add(ChatMessage("Analyzing...", isUser = false))
 
-        scope.launch {
+                scope.launch {
             try {
-                // FIXED LINE 101: Using RequestOptions to pass the API Key
-                val model = Firebase.ai(
-                    backend = GenerativeBackend.vertexAI(
-                        requestOptions = RequestOptions(apiKey = apiKey)
-                    )
-                ).generativeModel(modelName = "gemini-1.5-flash")
+                // STABLE INITIALIZATION:
+                // Using the direct GenerativeModel constructor to bypass parameter name issues
+                val model = com.google.firebase.ai.GenerativeModel(
+                    modelName = "gemini-1.5-flash",
+                    apiKey = apiKey
+                )
                 
+                // Clear the "Analyzing..." placeholder
                 messages[aiIndex] = ChatMessage("", isUser = false)
 
                 model.generateContentStream(userText).collect { chunk ->
@@ -115,6 +116,7 @@ fun CodeStackApp() {
                 isGenerating = false
             }
         }
+
     }
 
     Scaffold(
