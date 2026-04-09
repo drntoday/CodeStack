@@ -22,8 +22,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-// STABLE 2026 IMPORTS
-import com.google.firebase.ai.GenerativeModel
+// 2026 STABLE AI SDK IMPORTS
+import com.google.firebase.Firebase
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.RequestOptions
 import com.google.firebase.ai.type.content
 
 data class ChatMessage(val text: String, val isUser: Boolean)
@@ -93,14 +95,14 @@ fun CodeStackApp() {
 
         scope.launch {
             try {
-                // STABLE INITIALIZATION:
-                // Using the direct GenerativeModel constructor to bypass parameter name issues
-                val model = GenerativeModel(
+                // FIXED 2026 FACTORY CALL
+                // This uses the official public extension 'generativeModel' 
+                // and correctly passes API Key via RequestOptions.
+                val model = Firebase.ai.generativeModel(
                     modelName = "gemini-1.5-flash",
-                    apiKey = apiKey
+                    requestOptions = RequestOptions(apiKey = apiKey)
                 )
                 
-                // Clear the "Analyzing..." placeholder
                 messages[aiIndex] = ChatMessage("", isUser = false)
 
                 model.generateContentStream(userText).collect { chunk ->
