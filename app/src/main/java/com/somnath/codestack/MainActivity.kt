@@ -22,7 +22,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-// 2026 STABLE AI SDK IMPORTS
+// 2026 STABLE FIREBASE AI IMPORTS
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.RequestOptions
@@ -54,20 +54,23 @@ fun CodeStackApp() {
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
+    // Auto-scroll logic
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
     }
 
     if (showApiKeyDialog) {
         var tempKey by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("CodeStack Setup") },
+            title = { Text("CodeStack AI Setup") },
             text = {
                 OutlinedTextField(
                     value = tempKey,
                     onValueChange = { tempKey = it },
-                    label = { Text("Enter Gemini API Key") },
+                    label = { Text("Gemini API Key") },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -91,16 +94,18 @@ fun CodeStackApp() {
         inputText = ""
         isGenerating = true
         val aiIndex = messages.size
-        messages.add(ChatMessage("Analyzing...", isUser = false))
+        messages.add(ChatMessage("Thinking...", isUser = false))
 
         scope.launch {
             try {
-                // FIXED 2026 FACTORY CALL
-                // This uses the official public extension 'generativeModel' 
-                // and correctly passes API Key via RequestOptions.
+                /* FIXED FOR 2026 SDK: 
+                   Using positional arguments to bypass "apiKey parameter not found" errors.
+                   Argument 1: Model Name (String)
+                   Argument 2: RequestOptions (contains the API Key)
+                */
                 val model = Firebase.ai.generativeModel(
-                    modelName = "gemini-1.5-flash",
-                    requestOptions = RequestOptions(apiKey = apiKey)
+                    "gemini-1.5-flash",
+                    RequestOptions(apiKey) 
                 )
                 
                 messages[aiIndex] = ChatMessage("", isUser = false)
@@ -120,26 +125,42 @@ fun CodeStackApp() {
     Scaffold(
         topBar = { 
             CenterAlignedTopAppBar(
-                title = { Text("CodeStack AI") },
+                title = { Text("CodeStack", fontSize = 20.sp) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
-            )
+            ) 
         },
         bottomBar = {
             Surface(tonalElevation = 8.dp) {
-                Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth()
+                        .imePadding(), // Ensure keyboard doesn't hide input
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask Gemini...") },
+                        placeholder = { Text("Ask anything...") },
                         enabled = !isGenerating,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { sendMessage() })
+                        keyboardActions = KeyboardActions(onSend = { sendMessage() }),
+                        shape = RoundedCornerShape(24.dp)
                     )
-                    IconButton(onClick = { sendMessage() }, enabled = !isGenerating && inputText.isNotBlank()) {
-                        Icon(Icons.Default.Send, contentDescription = "Send")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    FloatingActionButton(
+                        onClick = { sendMessage() },
+                        containerColor = if (isGenerating || inputText.isBlank()) 
+                            MaterialTheme.colorScheme.surfaceVariant 
+                        else 
+                            MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
             }
@@ -147,9 +168,11 @@ fun CodeStackApp() {
     ) { padding ->
         LazyColumn(
             state = listState, 
-            modifier = Modifier.padding(padding).fillMaxSize(),
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(messages) { msg ->
                 ChatBubble(msg)
@@ -161,17 +184,39 @@ fun CodeStackApp() {
 @Composable
 fun ChatBubble(msg: ChatMessage) {
     val alignment = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-    val color = if (msg.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
+    val containerColor = if (msg.isUser) 
+        MaterialTheme.colorScheme.primary 
+    else 
+        MaterialTheme.colorScheme.secondaryContainer
+    
+    val textColor = if (msg.isUser) 
+        MaterialTheme.colorScheme.onPrimary 
+    else 
+        MaterialTheme.colorScheme.onSecondaryContainer
+
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Card(
-            shape = RoundedCornerShape(12.dp), 
-            colors = CardDefaults.cardColors(containerColor = color),
-            modifier = Modifier.widthIn(max = 280.dp)
+            shape = RoundedCornerShape(
+                topStart = 16.dp, 
+                topEnd = 16.dp, 
+                bottomStart = if (msg.isUser) 16.dp else 0.dp, 
+                bottomEnd = if (msg.isUser) 0.dp else 16.dp
+            ),
+            colors = CardDefaults.cardColors(containerColor = containerColor),
+            modifier = Modifier.widthIn(max = 300.dp)
         ) {
-            Text(text = msg.text, modifier = Modifier.padding(12.dp), fontSize = 15.sp)
+            Text(
+                text = msg.text, 
+                modifier = Modifier.padding(12.dp), 
+                fontSize = 15.sp,
+                color = textColor
+            )
         }
     }
 }
 
-private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("prefs", 0).edit().putString("key", k).apply()
-private fun getApiKey(c: Context) = c.getSharedPreferences("prefs", 0).getString("key", "") ?: ""
+private fun saveApiKey(c: Context, k: String) = 
+    c.getSharedPreferences("prefs", Context.MODE_PRIVATE).edit().putString("key", k).apply()
+
+private fun getApiKey(c: Context) = 
+    c.getSharedPreferences("prefs", Context.MODE_PRIVATE).getString("key", "") ?: ""
