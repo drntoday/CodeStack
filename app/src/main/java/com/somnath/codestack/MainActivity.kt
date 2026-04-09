@@ -22,10 +22,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-// 2026 STABLE FIREBASE AI IMPORTS
+// 2026 FIREBASE AI LOGIC IMPORTS
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.RequestOptions
+import com.google.firebase.ai.type.GenerativeBackend
+import com.google.firebase.ai.type.GenerationConfig
 import com.google.firebase.ai.type.content
 
 data class ChatMessage(val text: String, val isUser: Boolean)
@@ -54,7 +55,6 @@ fun CodeStackApp() {
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Auto-scroll logic
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -98,14 +98,14 @@ fun CodeStackApp() {
 
         scope.launch {
             try {
-                /* FIXED FOR 2026 SDK: 
-                   Using positional arguments to bypass "apiKey parameter not found" errors.
-                   Argument 1: Model Name (String)
-                   Argument 2: RequestOptions (contains the API Key)
-                */
+                // ✅ CORRECTED 2026 INITIALIZATION
                 val model = Firebase.ai.generativeModel(
-                    "gemini-1.5-flash",
-                    RequestOptions(apiKey) 
+                    modelName = "gemini-1.5-flash",
+                    generationConfig = null,
+                    safetySettings = null,
+                    backend = GenerativeBackend.google(
+                        apiKey = apiKey
+                    )
                 )
                 
                 messages[aiIndex] = ChatMessage("", isUser = false)
@@ -115,7 +115,7 @@ fun CodeStackApp() {
                     messages[aiIndex] = messages[aiIndex].copy(text = currentText + (chunk.text ?: ""))
                 }
             } catch (e: Exception) {
-                messages[aiIndex] = ChatMessage("System Error: ${e.localizedMessage}", isUser = false)
+                messages[aiIndex] = ChatMessage("Error: ${e.localizedMessage}", isUser = false)
             } finally {
                 isGenerating = false
             }
@@ -134,10 +134,7 @@ fun CodeStackApp() {
         bottomBar = {
             Surface(tonalElevation = 8.dp) {
                 Row(
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .fillMaxWidth()
-                        .imePadding(), // Ensure keyboard doesn't hide input
+                    modifier = Modifier.padding(12.dp).fillMaxWidth().imePadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -151,16 +148,12 @@ fun CodeStackApp() {
                         shape = RoundedCornerShape(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    FloatingActionButton(
+                    IconButton(
                         onClick = { sendMessage() },
-                        containerColor = if (isGenerating || inputText.isBlank()) 
-                            MaterialTheme.colorScheme.surfaceVariant 
-                        else 
-                            MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(48.dp),
-                        shape = RoundedCornerShape(24.dp)
+                        enabled = !isGenerating && inputText.isNotBlank(),
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
+                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -168,9 +161,7 @@ fun CodeStackApp() {
     ) { padding ->
         LazyColumn(
             state = listState, 
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
+            modifier = Modifier.padding(padding).fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -184,39 +175,23 @@ fun CodeStackApp() {
 @Composable
 fun ChatBubble(msg: ChatMessage) {
     val alignment = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-    val containerColor = if (msg.isUser) 
-        MaterialTheme.colorScheme.primary 
-    else 
-        MaterialTheme.colorScheme.secondaryContainer
+    val containerColor = if (msg.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
     
-    val textColor = if (msg.isUser) 
-        MaterialTheme.colorScheme.onPrimary 
-    else 
-        MaterialTheme.colorScheme.onSecondaryContainer
-
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Card(
-            shape = RoundedCornerShape(
-                topStart = 16.dp, 
-                topEnd = 16.dp, 
-                bottomStart = if (msg.isUser) 16.dp else 0.dp, 
-                bottomEnd = if (msg.isUser) 0.dp else 16.dp
-            ),
+            shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = containerColor),
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
-            Text(
-                text = msg.text, 
-                modifier = Modifier.padding(12.dp), 
-                fontSize = 15.sp,
-                color = textColor
-            )
+            Text(text = msg.text, modifier = Modifier.padding(12.dp), fontSize = 15.sp)
         }
     }
 }
 
-private fun saveApiKey(c: Context, k: String) = 
+private fun saveApiKey(c: Context, k: String) {
     c.getSharedPreferences("prefs", Context.MODE_PRIVATE).edit().putString("key", k).apply()
+}
 
-private fun getApiKey(c: Context) = 
-    c.getSharedPreferences("prefs", Context.MODE_PRIVATE).getString("key", "") ?: ""
+private fun getApiKey(c: Context): String {
+    return c.getSharedPreferences("prefs", Context.MODE_PRIVATE).getString("key", "") ?: ""
+}
