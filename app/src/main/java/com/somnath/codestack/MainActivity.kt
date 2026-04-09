@@ -110,7 +110,7 @@ fun CodeStackApp() {
         scope.launch {
             try {
                 val generativeModel = GenerativeModel(
-                    modelName = "gemini-1.5-flash-latest",
+                    modelName = "gemini-1.5-flash-001",
                     apiKey = apiKey
                 )
 
