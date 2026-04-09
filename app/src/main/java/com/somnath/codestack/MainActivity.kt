@@ -22,12 +22,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-// UPDATED 2026 IMPORTS
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.GenerativeBackend
+// STABLE 2026 IMPORTS
+import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.ai.type.content
-import com.google.firebase.ai.type.RequestOptions
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
@@ -94,11 +91,11 @@ fun CodeStackApp() {
         val aiIndex = messages.size
         messages.add(ChatMessage("Analyzing...", isUser = false))
 
-                scope.launch {
+        scope.launch {
             try {
                 // STABLE INITIALIZATION:
                 // Using the direct GenerativeModel constructor to bypass parameter name issues
-                val model = com.google.firebase.ai.GenerativeModel(
+                val model = GenerativeModel(
                     modelName = "gemini-1.5-flash",
                     apiKey = apiKey
                 )
@@ -116,11 +113,17 @@ fun CodeStackApp() {
                 isGenerating = false
             }
         }
-
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("CodeStack AI") }) },
+        topBar = { 
+            CenterAlignedTopAppBar(
+                title = { Text("CodeStack AI") },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            )
+        },
         bottomBar = {
             Surface(tonalElevation = 8.dp) {
                 Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -143,7 +146,7 @@ fun CodeStackApp() {
         LazyColumn(
             state = listState, 
             modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(12.dp),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(messages) { msg ->
