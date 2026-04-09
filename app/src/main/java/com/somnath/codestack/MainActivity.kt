@@ -22,10 +22,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-// STABLE 2026 FIREBASE AI LOGIC IMPORTS
+
+// 2026 STABLE FIREBASE AI IMPORTS
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
+import com.google.firebase.ai.type.RequestOptions
 import com.google.firebase.ai.type.content
 
 data class ChatMessage(val text: String, val isUser: Boolean)
@@ -64,7 +66,7 @@ fun CodeStackApp() {
         var tempKey by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("CodeStack AI Setup") },
+            title = { Text("CodeStack Setup") },
             text = {
                 OutlinedTextField(
                     value = tempKey,
@@ -80,7 +82,7 @@ fun CodeStackApp() {
                         apiKey = tempKey
                         showApiKeyDialog = false
                     }
-                }) { Text("Join Chat") }
+                }) { Text("Initialize") }
             }
         )
     }
@@ -97,11 +99,13 @@ fun CodeStackApp() {
 
         scope.launch {
             try {
-                // ✅ 2026 STABLE INITIALIZATION
-                // 1. Specify the backend with googleAI()
-                // 2. Create the model instance
-                val model = Firebase.ai(backend = GenerativeBackend.googleAI(apiKey))
-                    .generativeModel(modelName = "gemini-3.1-flash-lite-preview")
+                // ✅ FINAL 2026 INITIALIZATION LOGIC
+                // googleAI() takes NO arguments. API Key is passed via RequestOptions.
+                val model = Firebase.ai(backend = GenerativeBackend.googleAI())
+                    .generativeModel(
+                        modelName = "gemini-2.5-flash-lite",
+                        requestOptions = RequestOptions(apiKey = apiKey)
+                    )
                 
                 messages[aiIndex] = ChatMessage("", isUser = false)
 
@@ -119,12 +123,7 @@ fun CodeStackApp() {
 
     Scaffold(
         topBar = { 
-            CenterAlignedTopAppBar(
-                title = { Text("CodeStack") },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) 
+            CenterAlignedTopAppBar(title = { Text("CodeStack AI") }) 
         },
         bottomBar = {
             Surface(tonalElevation = 8.dp) {
@@ -136,13 +135,13 @@ fun CodeStackApp() {
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask anything...") },
+                        placeholder = { Text("Ask Gemini...") },
                         enabled = !isGenerating,
                         shape = RoundedCornerShape(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = { sendMessage() }, enabled = !isGenerating && inputText.isNotBlank()) {
-                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Send, contentDescription = "Send")
                     }
                 }
             }
