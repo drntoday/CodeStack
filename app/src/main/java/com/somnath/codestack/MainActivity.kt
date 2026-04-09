@@ -96,10 +96,11 @@ fun CodeStackApp() {
 
         scope.launch {
             try {
-                // NEW 2026 INITIALIZATION
-                // Use the Firebase AI Logic SDK with the Vertex AI backend
+                // FIXED LINE 101: Using RequestOptions to pass the API Key
                 val model = Firebase.ai(
-                    backend = GenerativeBackend.vertexAI(apiKey = apiKey)
+                    backend = GenerativeBackend.vertexAI(
+                        requestOptions = RequestOptions(apiKey = apiKey)
+                    )
                 ).generativeModel(modelName = "gemini-1.5-flash")
                 
                 messages[aiIndex] = ChatMessage("", isUser = false)
