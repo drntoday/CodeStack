@@ -22,11 +22,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-// 2026 FIREBASE AI LOGIC IMPORTS
+// STABLE 2026 FIREBASE AI LOGIC IMPORTS
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
-import com.google.firebase.ai.type.GenerationConfig
 import com.google.firebase.ai.type.content
 
 data class ChatMessage(val text: String, val isUser: Boolean)
@@ -98,15 +97,11 @@ fun CodeStackApp() {
 
         scope.launch {
             try {
-                // ✅ CORRECTED 2026 INITIALIZATION
-                val model = Firebase.ai.generativeModel(
-                    modelName = "gemini-1.5-flash",
-                    generationConfig = null,
-                    safetySettings = null,
-                    backend = GenerativeBackend.google(
-                        apiKey = apiKey
-                    )
-                )
+                // ✅ 2026 STABLE INITIALIZATION
+                // 1. Specify the backend with googleAI()
+                // 2. Create the model instance
+                val model = Firebase.ai(backend = GenerativeBackend.googleAI(apiKey))
+                    .generativeModel(modelName = "gemini-3.1-flash-lite-preview")
                 
                 messages[aiIndex] = ChatMessage("", isUser = false)
 
@@ -115,7 +110,7 @@ fun CodeStackApp() {
                     messages[aiIndex] = messages[aiIndex].copy(text = currentText + (chunk.text ?: ""))
                 }
             } catch (e: Exception) {
-                messages[aiIndex] = ChatMessage("Error: ${e.localizedMessage}", isUser = false)
+                messages[aiIndex] = ChatMessage("System Error: ${e.localizedMessage}", isUser = false)
             } finally {
                 isGenerating = false
             }
@@ -125,7 +120,7 @@ fun CodeStackApp() {
     Scaffold(
         topBar = { 
             CenterAlignedTopAppBar(
-                title = { Text("CodeStack", fontSize = 20.sp) },
+                title = { Text("CodeStack") },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -143,16 +138,10 @@ fun CodeStackApp() {
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Ask anything...") },
                         enabled = !isGenerating,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { sendMessage() }),
                         shape = RoundedCornerShape(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = { sendMessage() },
-                        enabled = !isGenerating && inputText.isNotBlank(),
-                        modifier = Modifier.size(48.dp)
-                    ) {
+                    IconButton(onClick = { sendMessage() }, enabled = !isGenerating && inputText.isNotBlank()) {
                         Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -175,23 +164,20 @@ fun CodeStackApp() {
 @Composable
 fun ChatBubble(msg: ChatMessage) {
     val alignment = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-    val containerColor = if (msg.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-    
+    val color = if (msg.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = containerColor),
-            modifier = Modifier.widthIn(max = 300.dp)
+            colors = CardDefaults.cardColors(containerColor = color),
+            modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Text(text = msg.text, modifier = Modifier.padding(12.dp), fontSize = 15.sp)
         }
     }
 }
 
-private fun saveApiKey(c: Context, k: String) {
-    c.getSharedPreferences("prefs", Context.MODE_PRIVATE).edit().putString("key", k).apply()
-}
+private fun saveApiKey(c: Context, k: String) = 
+    c.getSharedPreferences("prefs", 0).edit().putString("key", k).apply()
 
-private fun getApiKey(c: Context): String {
-    return c.getSharedPreferences("prefs", Context.MODE_PRIVATE).getString("key", "") ?: ""
-}
+private fun getApiKey(c: Context) = 
+    c.getSharedPreferences("prefs", 0).getString("key", "") ?: ""
