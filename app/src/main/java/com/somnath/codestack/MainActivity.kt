@@ -16,6 +16,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -31,7 +32,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.FlightTakeoff // Rocket
+import androidx.compose.material.icons.filled.FlightTakeoff // Rocket Icon
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Send
@@ -41,7 +42,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -65,18 +65,18 @@ import com.google.ai.client.generativeai.type.content
 
 /**
  * CODESTACK - ADVANCED AI DEVELOPMENT ENVIRONMENT
- * ARCHITECTURE BY SOMNATH KURMI
- * VERSION: 2.1.1 (FULL REFACTOR)
+ * FULL FLEDGED VERSION - NAVIGATION, DASHBOARD, DRAWER, EDITOR
  */
 
-// --- Theme & Colors ---
-private val DeepSlate = Color(0xFF0f172a) // Background
-private val ElectricBlue = Color(0xFF3B82F6) // Card A
-private val Violet = Color(0xFF8B5CF6) // Card B
-private val SlateCard = Color(0xFF64748B) // Card C
+// --- Colors & Theme ---
+private val DeepSlate = Color(0xFF0f172a)
+private val ElectricBlue = Color(0xFF3B82F6)
+private val Violet = Color(0xFF8B5CF6)
+private val SlateCard = Color(0xFF64748B)
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
+// --- Main Activity ---
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +127,7 @@ sealed class Screen(val route: String) {
     }
 }
 
+// --- App Structure & Drawer ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodeStackApp() {
@@ -283,8 +284,8 @@ fun CodeStackApp() {
     }
 }
 
-// --- Pages ---
-
+// --- Dashboard Page (Fixed) ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardPage(navController: NavController) {
     Column(
@@ -294,7 +295,7 @@ fun DashboardPage(navController: NavController) {
             .background(DeepSlate),
         horizontalAlignment = Alignment.Start
     ) {
-        // Header
+        // Header Section
         Text(
             "Welcome back, Developer",
             style = MaterialTheme.typography.headlineMedium,
@@ -325,7 +326,7 @@ fun DashboardPage(navController: NavController) {
                 ActionCard(
                     title = "Initialize Project",
                     description = "Start an autonomous development session.",
-                    icon = Icons.Default.FlightTakeoff, // Rocket
+                    icon = Icons.Default.FlightTakeoff, // Rocket icon
                     iconColor = ElectricBlue,
                     onClick = { 
                         navController.navigate(Screen.Terminal.createRoute(true)) 
@@ -346,8 +347,8 @@ fun DashboardPage(navController: NavController) {
                 )
             }
             
-            // Card C: Settings (Full width)
-            item(span = { GridItemSpan(2) }) {
+            // Card C: System Settings (Full Width)
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 ActionCard(
                     modifier = Modifier.fillMaxWidth(),
                     title = "System Settings",
@@ -363,6 +364,7 @@ fun DashboardPage(navController: NavController) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActionCard(
     modifier: Modifier = Modifier,
@@ -444,6 +446,7 @@ fun ActionCard(
     }
 }
 
+// --- Terminal Page ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalPage(navController: NavController, isProjectMode: Boolean) {
@@ -637,6 +640,7 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
     }
 }
 
+// --- Vault Page ---
 @Composable
 fun VaultPage(navController: NavController) {
     val context = LocalContext.current
@@ -701,6 +705,7 @@ fun VaultPage(navController: NavController) {
     }
 }
 
+// --- Editor Page ---
 @Composable
 fun EditorPage(navController: NavController, fileName: String) {
     val context = LocalContext.current
@@ -769,6 +774,7 @@ fun EditorPage(navController: NavController, fileName: String) {
     }
 }
 
+// --- Settings Page ---
 @Composable
 fun SettingsPage(navController: NavController) {
     val context = LocalContext.current
@@ -823,7 +829,7 @@ fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
         modifier = Modifier
             .fillMaxHeight()
             .width(280.dp)
-            .background(Color(0xFF0B1120)) // Darker than Deep Slate
+            .background(Color(0xFF0B1120)) 
             .padding(16.dp)
     ) {
         Text(
@@ -848,7 +854,7 @@ fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
         Divider(color = Color.Gray.copy(alpha = 0.2f))
         
         DrawerItem(icon = Icons.AutoMirrored.Filled.ExitToApp, label = "Exit App", route = "", onNavigate = {
-             // Handle exit logic
+             // Handle exit
         }, onClose)
     }
 }
