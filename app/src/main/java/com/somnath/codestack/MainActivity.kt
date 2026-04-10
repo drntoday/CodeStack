@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
-// STABLE 2026 GOOGLE AI SDK IMPORTS
+// STABLE 2026 GOOGLE AI SDK
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 
@@ -32,8 +33,11 @@ data class ChatMessage(val text: String, val isUser: Boolean)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // FIX: Pushes the app content away from system navigation and status bars
+        enableEdgeToEdge()
+        
         setContent {
-            // Dark Mode Theme for professional developer aesthetic
             MaterialTheme(colorScheme = darkColorScheme()) {
                 CodeStackApp()
             }
@@ -78,7 +82,7 @@ fun CodeStackApp() {
                         apiKey = tempKey
                         showApiKeyDialog = false
                     }
-                }) { Text("Start Engineering") }
+                }) { Text("Deploy Engine") }
             }
         )
     }
@@ -95,15 +99,15 @@ fun CodeStackApp() {
 
         scope.launch {
             try {
-                // GOOGLE AI STUDIO: Gemini 3.1 Flash (April 2026 Standard)
+                // Using 3.1 Flash-Lite for optimized performance on Vivo Y30
                 val model = GenerativeModel(
                     modelName = "gemini-3.1-flash-lite-preview", 
                     apiKey = apiKey,
                     systemInstruction = content {
                         text("""
                             You are CodeStack AI, a Senior Software Engineer developed by Somnath Kurmi. 
-                            You are specialized in Android, Web, and GitHub Actions.
-                            Focus on providing production-ready code with clear directory structures.
+                            You specialize in full-stack development and Android.
+                            Provide clean, documented code and project structures.
                         """.trimIndent())
                     }
                 )
@@ -122,21 +126,45 @@ fun CodeStackApp() {
     }
 
     Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text("CODESTACK") }) },
+        modifier = Modifier.fillMaxSize(),
+        topBar = { 
+            CenterAlignedTopAppBar(
+                title = { Text("CODESTACK", style = MaterialTheme.typography.titleLarge) },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                )
+            )
+        },
         bottomBar = {
-            Surface(tonalElevation = 8.dp, modifier = Modifier.imePadding()) {
-                Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // FIX: Added navigationBarsPadding() and imePadding() to prevent overlap
+            Surface(
+                tonalElevation = 8.dp, 
+                modifier = Modifier
+                    .imePadding() 
+                    .navigationBarsPadding() 
+            ) {
+                Row(
+                    Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth(), 
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Command the AI...") },
+                        placeholder = { Text("Build something great...") },
                         enabled = !isGenerating,
                         shape = RoundedCornerShape(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = { sendMessage() }) {
-                        Icon(Icons.Default.Send, "Send", tint = MaterialTheme.colorScheme.primary)
+                    IconButton(
+                        onClick = { sendMessage() },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Send, "Send", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
             }
@@ -144,7 +172,10 @@ fun CodeStackApp() {
     ) { padding ->
         LazyColumn(
             state = listState, 
-            modifier = Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background),
+            modifier = Modifier
+                .padding(padding) // Scaffold padding prevents content from going under bars
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -155,22 +186,25 @@ fun CodeStackApp() {
 
 @Composable
 fun ChatBubble(msg: ChatMessage) {
-    // FIXING THE TYPE MISMATCH: Using Alignment.Horizontal values
     val horizontalAlign = if (msg.isUser) Alignment.End else Alignment.Start
-    val bgColor = if (msg.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val bgColor = if (msg.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer
+    val textColor = if (msg.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
     
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = horizontalAlign // Fixed: Corrected Alignment.Horizontal type
+        horizontalAlignment = horizontalAlign
     ) {
         Card(
-            shape = RoundedCornerShape(12.dp), 
+            shape = RoundedCornerShape(16.dp), 
             colors = CardDefaults.cardColors(containerColor = bgColor),
-            modifier = Modifier.widthIn(max = 320.dp)
+            modifier = Modifier.widthIn(max = 300.dp)
         ) {
             Text(
                 text = msg.text, 
                 modifier = Modifier.padding(12.dp),
+                color = textColor,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
                 fontFamily = if (msg.text.contains("```")) FontFamily.Monospace else FontFamily.Default
             )
         }
