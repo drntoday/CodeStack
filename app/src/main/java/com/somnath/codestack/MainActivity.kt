@@ -76,6 +76,9 @@ import com.google.ai.client.generativeai.type.content
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.ResponseBody
@@ -87,8 +90,8 @@ import java.util.UUID
 // STABLE 2026 GOOGLE AI SDK
 
 /**
- * CODESTACK - ADVANCED AI DEVELOPMENT ENVIRONMENT
- * VERSION: 3.0.0 (REAL API INTEGRATION)
+ * CODESTACK - FULLY CORRECTED VERSION
+ * VERSION: 3.1.0 (StateFlow + Type Safety)
  */
 
 // --- Colors & Theme ---
@@ -101,8 +104,10 @@ private val TerminalGreen = Color(0xFF00FF00)
 
 // --- Data Models ---
 data class ChatMessage(val text: String, val isUser: Boolean)
-data class ProjectFile(val path: String, val content: String)
+// Explicitly defined with name, path, and content
+data class ProjectFile(val name: String, val path: String, val content: String)
 data class ArchitectResponse(val files: List<ProjectFile>)
+data class WorkflowStep(val id: Int, val title: String)
 
 // --- GitHub API Interface ---
 interface GitHubApiService {
@@ -127,11 +132,28 @@ interface GitHubApiService {
 
 // --- MainViewModel (The Orchestrator) ---
 class MainViewModel(private val context: Context) : ViewModel() {
-    // --- State ---
-    val terminalLogs = mutableStateListOf<String>()
-    val manifestFiles = mutableStateListOf<ProjectFile>()
-    var workflowStep by mutableIntStateOf(0) // 0:Idle, 1:Planning, 2:Gen, 3:Sync, 4:Test
-    var isBuilding by mutableStateOf(false)
+    
+    // --- StateFlows ---
+    private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
+    val terminalLogs: StateFlow<List<String>> = _terminalLogs.asStateFlow()
+
+    private val _manifestFiles = MutableStateFlow<List<ProjectFile>>(emptyList())
+    val manifestFiles: StateFlow<List<ProjectFile>> = _manifestFiles.asStateFlow()
+
+    private val _workflowStep = MutableStateFlow(0)
+    val workflowStep: StateFlow<Int> = _workflowStep.asStateFlow()
+
+    private val _isBuilding = MutableStateFlow(false)
+    val isBuilding: StateFlow<Boolean> = _isBuilding.asStateFlow()
+    
+    // Constant List of Steps (Exposed as StateFlow to strictly follow prompt, though static)
+    private val _workflowSteps = MutableStateFlow(listOf(
+        WorkflowStep(0, "Requirements"),
+        WorkflowStep(1, "Code Gen"),
+        WorkflowStep(2, "GitHub Sync"),
+        WorkflowStep(3, "Local Deploy")
+    ))
+    val workflowSteps: StateFlow<List<WorkflowStep>> = _workflowSteps.asStateFlow()
 
     // --- Networking Setup ---
     private val client = OkHttpClient.Builder().build()
@@ -145,20 +167,20 @@ class MainViewModel(private val context: Context) : ViewModel() {
     // --- Logger ---
     fun log(msg: String) {
         val timestamp = System.currentTimeMillis().toString().takeLast(4)
-        terminalLogs.add("[$timestamp] $msg")
+        _terminalLogs.value = _terminalLogs.value + "[$timestamp] $msg"
     }
 
     // --- 1. ORCHESTRATOR ---
     fun startAutonomousBuild(userRequirement: String) {
-        if (isBuilding) return
+        if (_isBuilding.value) return
         viewModelScope.launch {
-            isBuilding = true
-            terminalLogs.clear()
-            manifestFiles.clear()
+            _isBuilding.value = true
+            _terminalLogs.value = emptyList()
+            _manifestFiles.value = emptyList()
             
             try {
                 // STEP 1: PLANNING (Gemini)
-                workflowStep = 1
+                _workflowStep.value = 1
                 log("INITIATING PROJECT PLANNING...")
                 log("REQUIREMENT: $userRequirement")
                 
@@ -166,35 +188,35 @@ class MainViewModel(private val context: Context) : ViewModel() {
                 
                 if (files.isEmpty()) {
                     log("ERROR: FAILED TO GENERATE ARCHITECTURE.")
-                    isBuilding = false
-                    workflowStep = 0
+                    _isBuilding.value = false
+                    _workflowStep.value = 0
                     return@launch
                 }
                 
-                manifestFiles.addAll(files)
+                _manifestFiles.value = files
                 log("MANIFEST GENERATED: ${files.size} FILES FOUND.")
                 
-                // STEP 2: GENERATION (Virtual representation)
-                workflowStep = 2
+                // STEP 2: GENERATION
+                _workflowStep.value = 2
                 log("CODE GENERATION COMPLETE. PREPARING SYNC...")
                 
                 // STEP 3: GITHUB SYNC
-                workflowStep = 3
+                _workflowStep.value = 3
                 syncToGitHub(files)
                 
                 // STEP 4: TESTING/DEPLOY
-                workflowStep = 4
+                _workflowStep.value = 4
                 log("TRIGGERING CI/CD PIPELINE...")
                 dispatchAction()
                 
                 log("BUILD SEQUENCE COMPLETE.")
-                workflowStep = 5 // Done
+                _workflowStep.value = 5 // Done
                 
             } catch (e: Exception) {
                 log("CRITICAL FAILURE: ${e.message}")
                 e.printStackTrace()
             } finally {
-                isBuilding = false
+                _isBuilding.value = false
             }
         }
     }
@@ -231,7 +253,12 @@ class MainViewModel(private val context: Context) : ViewModel() {
             
             log("PARSING STRUCTURED DATA...")
             val architectResponse = gson.fromJson(cleanJson, ArchitectResponse::class.java)
-            architectResponse.files
+            
+            // Map to ProjectFile including 'name' extraction
+            architectResponse.files.map { file ->
+                val name = file.path.substringAfterLast("/")
+                ProjectFile(name, file.path, file.content)
+            }
             
         } catch (e: Exception) {
             log("GEMINI PARSING ERROR: ${e.message}")
@@ -651,7 +678,7 @@ fun ActionCard(
     }
 }
 
-// --- TERMINAL PAGE (Connected to ViewModel) ---
+// --- TERMINAL PAGE (Corrected) ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProjectMode: Boolean) {
@@ -665,11 +692,12 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Observe ViewModel State
+    // Collect State from ViewModel
     val logs by viewModel.terminalLogs.collectAsState()
     val manifest by viewModel.manifestFiles.collectAsState()
-    val step by viewModel.workflowStep.collectAsState()
+    val currentStep by viewModel.workflowStep.collectAsState()
     val building by viewModel.isBuilding.collectAsState()
+    val steps by viewModel.workflowSteps.collectAsState() // List of WorkflowStep objects
     
     val terminalListState = rememberLazyListState()
 
@@ -738,7 +766,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                 }
 
                 // Build Button Area (Visible in Project Mode)
-                if (!building && step == 0 && messages.isNotEmpty()) {
+                if (!building && currentStep == 0 && messages.isNotEmpty()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         color = Color.Transparent
@@ -837,18 +865,18 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                     Text("WORKFLOW STATUS", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
                     
-                    // Workflow Steps
+                    // Workflow Steps - Explicit comparison
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        listOf("Requirements", "Code Gen", "GitHub Sync", "Local Deploy").forEachIndexed { index, stepName ->
+                        steps.forEach { step ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
                                         .size(12.dp)
                                         .background(
-                                            if (index < step) Emerald else Color.Gray,
+                                            if (step.id <= currentStep) Emerald else Color.Gray,
                                             CircleShape
                                         )
-                                        .then(if (index < step) {
+                                        .then(if (step.id <= currentStep) {
                                             Modifier.drawBehind {
                                                 drawRoundRect(
                                                     color = Emerald,
@@ -861,10 +889,10 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    stepName, 
-                                    color = if (index < step) Color.White else Color.Gray,
+                                    step.title, 
+                                    color = if (step.id <= currentStep) Color.White else Color.Gray,
                                     fontSize = 12.sp,
-                                    fontWeight = if (index < step) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (step.id <= currentStep) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                         }
@@ -934,8 +962,8 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
-                                    Text(file.path, color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                                    Text("${file.content.length} chars", color = Color.Gray, fontSize = 9.sp)
+                                    Text(file.name, color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                                    Text(file.path, color = Color.Gray, fontSize = 9.sp)
                                 }
                             }
                         }
