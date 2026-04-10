@@ -7,12 +7,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -32,11 +40,12 @@ import com.google.ai.client.generativeai.type.content
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
+// Navigation Screens
+enum class Screen { Terminal, Vault, Editor }
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // FIX: Pushes the app content away from system navigation and status bars
         enableEdgeToEdge()
         
         setContent {
@@ -46,16 +55,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Add this function inside your MainActivity class
-    private fun saveCodeToFile(context: Context, fileName: String, code: String) {
+    fun saveCodeToFile(context: Context, fileName: String, code: String) {
         try {
-            // Creates a "CodeStack" folder in your phone's documents
             val folder = File(context.getExternalFilesDir(null), "Projects")
             if (!folder.exists()) folder.mkdirs()
-
             val file = File(folder, fileName)
             file.writeText(code)
-            
             Toast.makeText(context, "Saved to /Projects/$fileName", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(context, "Error saving: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -67,6 +72,109 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CodeStackApp() {
     val context = LocalContext.current
+    val mainActivity = context as? MainActivity
+    
+    var currentScreen by remember { mutableStateOf(Screen.Terminal) }
+    var editingFile by remember { mutableStateOf<File?>(null) }
+
+    // Wrapper to handle saving from the Editor
+    fun handleSave(codeContent: String) {
+        editingFile?.let { file ->
+            try {
+                file.writeText(codeContent)
+                Toast.makeText(context, "Saved ${file.name}", Toast.LENGTH_SHORT).show()
+                currentScreen = Screen.Vault // Return to vault after save
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error saving: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    // Wrapper to handle saving from Chat Bubble
+    fun handleChatSave(codeContent: String) {
+        mainActivity?.saveCodeToFile(context, "Snippet_${System.currentTimeMillis()}.kt", codeContent)
+    }
+
+    Scaffold(
+        topBar = {
+            if (currentScreen == Screen.Editor) {
+                TopAppBar(
+                    title = { Text("Editor: ${editingFile?.name}") },
+                    navigationIcon = {
+                        IconButton(onClick = { currentScreen = Screen.Vault }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            } else if (currentScreen == Screen.Vault) {
+                 TopAppBar(
+                    title = { Text("QUANTUM VAULT") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            } else {
+                // Terminal Top Bar
+                CenterAlignedTopAppBar(
+                    title = { Text("CODESTACK", style = MaterialTheme.typography.titleLarge) },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    )
+                )
+            }
+        },
+        bottomBar = {
+            if (currentScreen != Screen.Editor) {
+                NavigationBar(modifier = Modifier.navigationBarsPadding()) {
+                    NavigationBarItem(
+                        selected = currentScreen == Screen.Terminal,
+                        onClick = { currentScreen = Screen.Terminal },
+                        label = { Text("Terminal") },
+                        icon = { Icon(Icons.Default.Send, contentDescription = null) }
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == Screen.Vault,
+                        onClick = { currentScreen = Screen.Vault },
+                        label = { Text("Vault") },
+                        icon = { Icon(Icons.Default.Code, contentDescription = null) }
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues)) {
+            when (currentScreen) {
+                Screen.Terminal -> TerminalScreen(onSaveCode = { handleChatSave(it) })
+                Screen.Vault -> VaultScreen(onFileClick = { file ->
+                    editingFile = file
+                    currentScreen = Screen.Editor
+                })
+                Screen.Editor -> {
+                    editingFile?.let { file ->
+                        EditorScreen(
+                            fileName = file.name,
+                            initialContent = file.readText(),
+                            onSave = { handleSave(it) }
+                        )
+                    } ?: Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Select a file from the Vault to edit")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TerminalScreen(onSaveCode: (String) -> Unit) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
     var apiKey by remember { mutableStateOf(getApiKey(context)) }
@@ -76,7 +184,6 @@ fun CodeStackApp() {
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Auto-scroll logic
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
@@ -117,7 +224,6 @@ fun CodeStackApp() {
 
         scope.launch {
             try {
-                // Using 3.1 Flash-Lite for optimized performance on Vivo Y30
                 val model = GenerativeModel(
                     modelName = "gemini-3.1-flash-lite-preview", 
                     apiKey = apiKey,
@@ -143,67 +249,56 @@ fun CodeStackApp() {
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = { 
-            CenterAlignedTopAppBar(
-                title = { Text("CODESTACK", style = MaterialTheme.typography.titleLarge) },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-                )
-            )
-        },
-        bottomBar = {
-            // FIX: Added navigationBarsPadding() and imePadding() to prevent overlap
-            Surface(
-                tonalElevation = 8.dp, 
-                modifier = Modifier
-                    .imePadding() 
-                    .navigationBarsPadding() 
-            ) {
-                Row(
-                    Modifier
-                        .padding(12.dp)
-                        .fillMaxWidth(), 
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Build something great...") },
-                        enabled = !isGenerating,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = { sendMessage() },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Icon(Icons.Default.Send, "Send", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                }
-            }
-        }
-    ) { padding ->
+    Column(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState, 
             modifier = Modifier
-                .padding(padding) // Scaffold padding prevents content from going under bars
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(messages) { ChatBubble(it) }
+            items(messages) { ChatBubble(it, onSaveCode) }
+        }
+
+        // Input Area
+        Surface(
+            tonalElevation = 8.dp, 
+            modifier = Modifier
+                .imePadding() 
+                .navigationBarsPadding() 
+        ) {
+            Row(
+                Modifier
+                    .padding(12.dp)
+                    .fillMaxWidth(), 
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Build something great...") },
+                    enabled = !isGenerating,
+                    shape = RoundedCornerShape(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = { sendMessage() },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Icon(Icons.Default.Send, "Send", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
         }
     }
 }
 
 @Composable
-fun ChatBubble(msg: ChatMessage) {
+fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
     val horizontalAlign = if (msg.isUser) Alignment.End else Alignment.Start
     val bgColor = if (msg.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer
     val textColor = if (msg.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
@@ -217,14 +312,159 @@ fun ChatBubble(msg: ChatMessage) {
             colors = CardDefaults.cardColors(containerColor = bgColor),
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
-            Text(
-                text = msg.text, 
-                modifier = Modifier.padding(12.dp),
-                color = textColor,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
-                fontFamily = if (msg.text.contains("```")) FontFamily.Monospace else FontFamily.Default
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = msg.text, 
+                    color = textColor,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontFamily = if (msg.text.contains("```")) FontFamily.Monospace else FontFamily.Default
+                )
+                
+                // ADD THIS: Save button for code blocks
+                if (!msg.isUser && msg.text.contains("```")) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            // Extract code between backticks
+                            val rawCode = msg.text.substringAfter("```").substringBeforeLast("```")
+                            
+                            // ROBUST PARSING: Check if first line is a language identifier
+                            val lines = rawCode.lines()
+                            val cleanCode = if (lines.isNotEmpty() && lines[0].trim().let { it == "kotlin" || it == "kt" || it == "java" }) {
+                                lines.drop(1).joinToString("\n")
+                            } else {
+                                rawCode
+                            }.trim()
+                            
+                            onSaveCode(cleanCode)
+                        },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(14.sp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Save to Vault", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun VaultScreen(onFileClick: (File) -> Unit) {
+    val context = LocalContext.current
+    val files = remember { 
+        mutableStateListOf<File>().apply {
+            val folder = File(context.getExternalFilesDir(null), "Projects")
+            addAll(folder.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() } ?: emptyList())
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("QUANTUM VAULT", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("${files.size} Assets Secured", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+        
+        Spacer(Modifier.height(16.dp))
+        
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(files) { file ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onFileClick(file) },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    ListItem(
+                        headlineContent = { Text(file.name, fontWeight = FontWeight.SemiBold) },
+                        supportingContent = { 
+                            Text("${file.length() / 1024} KB • ${file.extension.uppercase()}", fontSize = 12.sp) 
+                        },
+                        leadingContent = { 
+                            Icon(
+                                imageVector = if (file.extension == "kt") Icons.Default.Code else Icons.Default.Description,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingContent = {
+                            IconButton(onClick = { /* TODO: Implement Delete */ }) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EditorScreen(fileName: String, initialContent: String, onSave: (String) -> Unit) {
+    var codeText by remember { mutableStateOf(initialContent) }
+
+    Column(Modifier.fillMaxSize().background(Color(0xFF1E1E1E))) {
+        // File Tabs (Prototype Style)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, start = 16.dp)) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2D2D2D)),
+                shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
+            ) {
+                Text(
+                    text = fileName,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+
+        // The Editor Area
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .weight(1f)
+            .background(Color(0xFF1E1E1E))
+            .border(1.dp, Color.White.copy(alpha = 0.1f))
+        ) {
+            TextField(
+                value = codeText,
+                onValueChange = { codeText = it },
+                modifier = Modifier.fillMaxSize(),
+                textStyle = LocalTextStyle.current.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 14.sp,
+                    color = Color(0xFFD4D4D4),
+                    lineHeight = 20.sp
+                ),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent
+                ),
+                placeholder = { Text("// Start coding...", color = Color.Gray) }
             )
+        }
+        
+        // Bottom Action Bar for Editor
+        Surface(tonalElevation = 4.dp) {
+            Row(
+                Modifier.fillMaxWidth().padding(8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = { onSave(codeText) },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Save Changes")
+                }
+            }
         }
     }
 }
