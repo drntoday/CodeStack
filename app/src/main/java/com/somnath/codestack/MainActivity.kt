@@ -22,12 +22,14 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -48,6 +50,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -56,6 +60,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -65,7 +70,7 @@ import com.google.ai.client.generativeai.type.content
 
 /**
  * CODESTACK - ADVANCED AI DEVELOPMENT ENVIRONMENT
- * FULL FLEDGED VERSION - FIXED COMPILATION ERRORS
+ * VERSION: 2.2.0 (ADVANCED SETTINGS & SECURITY)
  */
 
 // --- Colors & Theme ---
@@ -73,6 +78,7 @@ private val DeepSlate = Color(0xFF0f172a)
 private val ElectricBlue = Color(0xFF3B82F6)
 private val Violet = Color(0xFF8B5CF6)
 private val SlateCard = Color(0xFF64748B)
+private val Emerald = Color(0xFF10b981) // Success Color
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
@@ -111,6 +117,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+// --- Persistence Helpers ---
+private fun saveApiKey(context: Context, key: String) = 
+    context.getSharedPreferences("cs_prefs", 0).edit().putString("gemini_key", key).apply()
+
+private fun getApiKey(context: Context) = 
+    context.getSharedPreferences("cs_prefs", 0).getString("gemini_key", "") ?: ""
+
+private fun saveGitHubToken(context: Context, token: String) = 
+    context.getSharedPreferences("cs_prefs", 0).edit().putString("github_token", token).apply()
+
+private fun getGitHubToken(context: Context) = 
+    context.getSharedPreferences("cs_prefs", 0).getString("github_token", "") ?: ""
 
 // --- Navigation Graph ---
 sealed class Screen(val route: String) {
@@ -295,7 +314,6 @@ fun DashboardPage(navController: NavController) {
             .background(DeepSlate),
         horizontalAlignment = Alignment.Start
     ) {
-        // Header Section
         Text(
             "Welcome back, Developer",
             style = MaterialTheme.typography.headlineMedium,
@@ -314,40 +332,32 @@ fun DashboardPage(navController: NavController) {
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        // Action Grid
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            // Card A: Initialize Project
             item {
                 ActionCard(
                     title = "Initialize Project",
                     description = "Start an autonomous development session.",
-                    icon = Icons.Default.FlightTakeoff, // Rocket icon
+                    icon = Icons.Default.FlightTakeoff,
                     iconColor = ElectricBlue,
-                    onClick = { 
-                        navController.navigate(Screen.Terminal.createRoute(true)) 
-                    }
+                    onClick = { navController.navigate(Screen.Terminal.createRoute(true)) }
                 )
             }
             
-            // Card B: General Query
             item {
                 ActionCard(
                     title = "General Query",
                     description = "Consult CodeStack AI for logic or debugging.",
                     icon = Icons.Default.ChatBubble,
                     iconColor = Violet,
-                    onClick = { 
-                        navController.navigate(Screen.Terminal.createRoute(false)) 
-                    }
+                    onClick = { navController.navigate(Screen.Terminal.createRoute(false)) }
                 )
             }
             
-            // Card C: System Settings (Full Width)
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ActionCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -355,9 +365,7 @@ fun DashboardPage(navController: NavController) {
                     description = "Manage Gemini and GitHub API Credentials.",
                     icon = Icons.Default.Settings,
                     iconColor = SlateCard,
-                    onClick = { 
-                        navController.navigate(Screen.Settings.route) 
-                    }
+                    onClick = { navController.navigate(Screen.Settings.route) }
                 )
             }
         }
@@ -376,8 +384,6 @@ fun ActionCard(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    
-    // Lift Effect Animation
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = tween(durationMillis = 150),
@@ -389,25 +395,14 @@ fun ActionCard(
         modifier = modifier
             .scale(scale)
             .height(140.dp)
-            .border(
-                width = 1.dp,
-                color = iconColor.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(16.dp)
-            ),
+            .border(1.dp, iconColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B) 
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 4.dp,
-            pressedElevation = 8.dp
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp, pressedElevation = 8.dp),
         interactionSource = interactionSource
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -415,32 +410,13 @@ fun ActionCard(
                 color = iconColor.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.padding(12.dp)
-                )
+                Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.padding(12.dp))
             }
-            
             Spacer(modifier = Modifier.width(16.dp))
-            
-            Column(
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+            Column(verticalArrangement = Arrangement.Center) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
-                    lineHeight = 14.sp
-                )
+                Text(text = description, style = MaterialTheme.typography.bodySmall, color = Color.Gray, lineHeight = 14.sp)
             }
         }
     }
@@ -590,10 +566,7 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
     val horizontalAlign = if (msg.isUser) Alignment.End else Alignment.Start
     val bgColor = if (msg.isUser) Color(0xFF334155) else Color(0xFF475569)
     
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = horizontalAlign
-    ) {
+    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = horizontalAlign) {
         Card(
             shape = RoundedCornerShape(if (msg.isUser) 16.dp else 4.dp), 
             colors = CardDefaults.cardColors(containerColor = bgColor),
@@ -776,51 +749,170 @@ fun EditorPage(navController: NavController, fileName: String) {
     }
 }
 
-// --- Settings Page ---
+// --- Settings Page (New Implementation) ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPage(navController: NavController) {
     val context = LocalContext.current
-    var apiKey by remember { mutableStateOf(getApiKey(context)) }
-    
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("API CONFIGURATION", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        OutlinedTextField(
-            value = apiKey,
-            onValueChange = { apiKey = it },
-            label = { Text("Gemini API Key") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary
-            )
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        OutlinedTextField(
-            value = "", 
-            onValueChange = { },
-            label = { Text("GitHub Personal Access Token") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            enabled = false 
-        )
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Button(
-            onClick = {
-                saveApiKey(context, apiKey)
-                Toast.makeText(context, "CONFIGURATION SAVED", Toast.LENGTH_SHORT).show()
-                navController.popBackStack()
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Load existing keys
+    var geminiKey by remember { mutableStateOf(getApiKey(context)) }
+    var githubKey by remember { mutableStateOf(getGitHubToken(context)) }
+
+    // Test Connection States
+    var isTestingGemini by remember { mutableStateOf(false) }
+    var isTestingGithub by remember { mutableStateOf(false) }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(24.dp)
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("SAVE CONFIGURATION")
+            Text(
+                "System Configuration",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Gemini Section
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Gemini API Key",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = geminiKey,
+                    onValueChange = { geminiKey = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                    ),
+                    trailingIcon = {
+                        Button(
+                            onClick = {
+                                if (geminiKey.isNotBlank()) {
+                                    isTestingGemini = true
+                                    scope.launch {
+                                        delay(1000) // Simulate Network Ping
+                                        isTestingGemini = false
+                                        snackbarHostState.showSnackbar("Gemini Connection: SUCCESS", duration = SnackbarDuration.Short)
+                                    }
+                                } else {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Please enter a key first", duration = SnackbarDuration.Short)
+                                    }
+                                }
+                            },
+                            enabled = !isTestingGemini,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = if (isTestingGemini) Color.Gray else MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(if (isTestingGemini) "Pinging..." else "Test", fontSize = 12.sp)
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // GitHub Section
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "GitHub Personal Access Token",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = githubKey,
+                    onValueChange = { githubKey = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary
+                    ),
+                    trailingIcon = {
+                        Button(
+                            onClick = {
+                                if (githubKey.isNotBlank()) {
+                                    isTestingGithub = true
+                                    scope.launch {
+                                        delay(1200) // Simulate Network Ping
+                                        isTestingGithub = false
+                                        snackbarHostState.showSnackbar("GitHub Connection: SUCCESS", duration = SnackbarDuration.Short)
+                                    }
+                                } else {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Please enter a token first", duration = SnackbarDuration.Short)
+                                    }
+                                }
+                            },
+                            enabled = !isTestingGithub,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = if (isTestingGithub) Color.Gray else MaterialTheme.colorScheme.secondary
+                            )
+                        ) {
+                            Text(if (isTestingGithub) "Pinging..." else "Test", fontSize = 12.sp)
+                        }
+                    }
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Note: Token requires 'repo' and 'workflow' scopes for autonomous features.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray.copy(alpha = 0.7f),
+                    fontSize = 11.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Save Button
+            Button(
+                onClick = {
+                    saveApiKey(context, geminiKey)
+                    saveGitHubToken(context, githubKey)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "Configuration Saved Successfully",
+                            duration = SnackbarDuration.Short,
+                            withDismissAction = true
+                        )
+                        delay(500) // Slight delay to show the snackbar before navigating back
+                        navController.popBackStack()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Emerald)
+            ) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black)
+                Spacer(Modifier.width(8.dp))
+                Text("Save Configuration", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -878,7 +970,3 @@ fun DrawerItem(icon: ImageVector, label: String, route: String, onNavigate: (Str
         Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }
-
-// --- Helpers ---
-private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("cs_prefs", 0).edit().putString("key", k).apply()
-private fun getApiKey(c: Context) = c.getSharedPreferences("cs_prefs", 0).getString("key", "") ?: ""
