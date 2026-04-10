@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,11 +16,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-// STABLE 2026 GOOGLE AI SDK IMPORTS
+
+// 2026 STABLE GOOGLE AI SDK
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 
@@ -29,7 +33,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = darkColorScheme()) {
                 CodeStackApp()
             }
         }
@@ -42,6 +46,7 @@ fun CodeStackApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
+    // State management
     var apiKey by remember { mutableStateOf(getApiKey(context)) }
     var showApiKeyDialog by remember { mutableStateOf(apiKey.isEmpty()) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
@@ -49,17 +54,23 @@ fun CodeStackApp() {
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Dialog for API Key
+    // Auto-scroll on new message
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+
+    // 1. API Key Setup Dialog
     if (showApiKeyDialog) {
         var tempKey by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("CodeStack AI Setup") },
+            title = { Text("CodeStack Setup") },
             text = {
                 OutlinedTextField(
                     value = tempKey,
                     onValueChange = { tempKey = it },
-                    label = { Text("Enter Gemini API Key") }
+                    label = { Text("Gemini API Key") },
+                    placeholder = { Text("AIzaSy...") }
                 )
             },
             confirmButton = {
@@ -69,69 +80,97 @@ fun CodeStackApp() {
                         apiKey = tempKey
                         showApiKeyDialog = false
                     }
-                }) { Text("Save & Start") }
+                }) { Text("Initialize Engine") }
             }
         )
     }
 
+    // 2. The Core AI Engine Logic
     fun sendMessage() {
         if (inputText.isBlank() || isGenerating) return
         val userText = inputText.trim()
         
-        messages.add(ChatMessage(userText, true))
+        messages.add(ChatMessage(userText, isUser = true))
         inputText = ""
         isGenerating = true
-        val aiIndex = messages.size
-        messages.add(ChatMessage("Thinking...", false))
+        
+        val aiMessageIndex = messages.size
+        messages.add(ChatMessage("Thinking...", isUser = false))
 
         scope.launch {
             try {
-                // FIXED 2026 CONSTRUCTOR:
-                // GenerativeModel(modelName, apiKey)
+                // MODEL UPGRADE: Using Gemini 3.1 Flash-Lite for speed on Vivo Y30
                 val model = GenerativeModel(
-                    modelName = "gemini-2.5-flash-lite", 
-                    apiKey = apiKey
+                    modelName = "gemini-3.1-flash-lite-preview",
+                    apiKey = apiKey,
+                    systemInstruction = content {
+                        text("""
+                            You are CodeStack AI, a Senior Software Engineer developed by Somnath Kurmi. 
+                            You are specialized in Android development (Kotlin/Compose), Web, and GitHub Actions.
+                            When asked to code, provide efficient, modular, and well-documented results.
+                            Outline folder structures for multi-file projects.
+                        """.trimIndent())
+                    }
                 )
                 
-                messages[aiIndex] = ChatMessage("", false)
+                messages[aiMessageIndex] = ChatMessage("", isUser = false)
+                
                 model.generateContentStream(userText).collect { chunk ->
-                    val currentText = messages[aiIndex].text
-                    messages[aiIndex] = messages[aiIndex].copy(text = currentText + (chunk.text ?: ""))
+                    val currentText = messages[aiMessageIndex].text
+                    messages[aiMessageIndex] = messages[aiMessageIndex].copy(text = currentText + (chunk.text ?: ""))
                 }
             } catch (e: Exception) {
-                messages[aiIndex] = ChatMessage("Error: ${e.localizedMessage}", false)
+                messages[aiMessageIndex] = ChatMessage("Error: ${e.localizedMessage}", isUser = false)
             } finally {
                 isGenerating = false
             }
         }
     }
 
+    // 3. The Main UI Layout
     Scaffold(
-        topBar = { TopAppBar(title = { Text("CodeStack") }) },
+        topBar = { 
+            CenterAlignedTopAppBar(
+                title = { Text("CODESTACK", style = MaterialTheme.typography.headlineSmall) },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            )
+        },
         bottomBar = {
-            Surface(tonalElevation = 8.dp) {
-                Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Surface(tonalElevation = 12.dp, modifier = Modifier.imePadding()) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask Gemini...") },
+                        placeholder = { Text("Ask Senior Engineer...") },
+                        maxLines = 4,
+                        shape = RoundedCornerShape(24.dp),
                         enabled = !isGenerating
                     )
-                    IconButton(onClick = { sendMessage() }) {
-                        Icon(Icons.Default.Send, "Send", tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    FloatingActionButton(
+                        onClick = { sendMessage() },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Default.Send, "Send")
                     }
                 }
             }
         }
     ) { padding ->
         LazyColumn(
-            state = listState, 
-            modifier = Modifier.padding(padding).fillMaxSize(),
+            state = listState,
+            modifier = Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(messages) { ChatBubble(it) }
+            items(messages) { msg ->
+                ChatBubble(msg)
+            }
         }
     }
 }
@@ -139,13 +178,34 @@ fun CodeStackApp() {
 @Composable
 fun ChatBubble(msg: ChatMessage) {
     val alignment = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-    val color = if (msg.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-    Box(Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = color)) {
-            Text(msg.text, Modifier.padding(12.dp))
+    val bgColor = if (msg.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (msg.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    
+    // Basic logic to detect code blocks (simple version for Vivo Y30 performance)
+    val isCode = msg.text.contains("```")
+
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = alignment) {
+        Card(
+            shape = RoundedCornerShape(
+                topStart = 16.dp, 
+                topEnd = 16.dp, 
+                bottomStart = if (msg.isUser) 16.dp else 0.dp, 
+                bottomEnd = if (msg.isUser) 0.dp else 16.dp
+            ),
+            colors = CardDefaults.cardColors(containerColor = bgColor),
+            modifier = Modifier.widthIn(max = 300.dp)
+        ) {
+            Text(
+                text = msg.text.replace("```", ""), // Hiding backticks for now
+                modifier = Modifier.padding(12.dp),
+                color = textColor,
+                fontSize = 15.sp,
+                fontFamily = if (isCode) FontFamily.Monospace else FontFamily.Default
+            )
         }
     }
 }
 
-private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("prefs", 0).edit().putString("key", k).apply()
-private fun getApiKey(c: Context) = c.getSharedPreferences("prefs", 0).getString("key", "") ?: ""
+// Data persistence
+private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("cs_prefs", 0).edit().putString("api_key", k).apply()
+private fun getApiKey(c: Context) = c.getSharedPreferences("cs_prefs", 0).getString("api_key", "") ?: ""
