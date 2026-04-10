@@ -40,7 +40,8 @@ import com.google.ai.client.generativeai.type.content
 
 /**
  * CODESTACK - ADVANCED AI DEVELOPMENT ENVIRONMENT
- * Developed by Somnath Kurmi
+ * ARCHITECTURE BY SOMNATH KURMI
+ * VERSION: 1.0.4 (QUANTUM VAULT ENABLED)
  */
 
 data class ChatMessage(val text: String, val isUser: Boolean)
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
                 colorScheme = darkColorScheme(
                     primary = Color(0xFF00E5FF),
                     secondary = Color(0xFF7C4DFF),
+                    tertiary = Color(0xFFFFAB40),
                     surface = Color(0xFF121212),
                     background = Color(0xFF0A0A0A)
                 )
@@ -135,7 +137,7 @@ fun CodeStackApp() {
                             letterSpacing = 2.sp
                         ) 
                     },
-                    colors = CenterAlignedTopAppBarDefaults.centerAlignedTopAppBarColors(
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color(0xFF121212).copy(alpha = 0.95f)
                     )
                 )
@@ -360,7 +362,6 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
-                        // FIXED: Using .dp to ensure build success
                         Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("DECRYPT & SAVE TO VAULT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -386,7 +387,7 @@ fun VaultScreen(onFileClick: (File) -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).background(Color.Green, RoundedCornerShape(4.dp)))
             Spacer(Modifier.width(8.dp))
-            Text("VAULT STATUS: ONLINE", style = MaterialTheme.typography.labelMedium, color = Color.Green)
+            Text("VAULT STATUS: ONLINE", style = MaterialTheme.typography.labelSmall, color = Color.Green)
         }
         
         Spacer(Modifier.height(24.dp))
