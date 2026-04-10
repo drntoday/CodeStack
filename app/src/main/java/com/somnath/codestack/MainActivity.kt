@@ -2,6 +2,7 @@ package com.somnath.codestack
 
 import android.content.Context
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import java.io.File
 
 // STABLE 2026 GOOGLE AI SDK
 import com.google.ai.client.generativeai.GenerativeModel
@@ -41,6 +43,22 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 CodeStackApp()
             }
+        }
+    }
+
+    // Add this function inside your MainActivity class
+    private fun saveCodeToFile(context: Context, fileName: String, code: String) {
+        try {
+            // Creates a "CodeStack" folder in your phone's documents
+            val folder = File(context.getExternalFilesDir(null), "Projects")
+            if (!folder.exists()) folder.mkdirs()
+
+            val file = File(folder, fileName)
+            file.writeText(code)
+            
+            Toast.makeText(context, "Saved to /Projects/$fileName", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Error saving: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }
