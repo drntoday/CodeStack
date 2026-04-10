@@ -13,7 +13,7 @@
         android:label="CodeStack"
         android:roundIcon="@drawable/ic_codestack_logo"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
+        android:theme="@style/Theme.CodeStack"
         android:usesCleartextTraffic="true"
         tools:targetApi="35">
         
