@@ -65,7 +65,7 @@ import com.google.ai.client.generativeai.type.content
 
 /**
  * CODESTACK - ADVANCED AI DEVELOPMENT ENVIRONMENT
- * FULL FLEDGED VERSION - NAVIGATION, DASHBOARD, DRAWER, EDITOR
+ * FULL FLEDGED VERSION - FIXED COMPILATION ERRORS
  */
 
 // --- Colors & Theme ---
@@ -284,7 +284,7 @@ fun CodeStackApp() {
     }
 }
 
-// --- Dashboard Page (Fixed) ---
+// --- Dashboard Page ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardPage(navController: NavController) {
@@ -641,6 +641,7 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
 }
 
 // --- Vault Page ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultPage(navController: NavController) {
     val context = LocalContext.current
@@ -706,6 +707,7 @@ fun VaultPage(navController: NavController) {
 }
 
 // --- Editor Page ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorPage(navController: NavController, fileName: String) {
     val context = LocalContext.current
@@ -775,6 +777,7 @@ fun EditorPage(navController: NavController, fileName: String) {
 }
 
 // --- Settings Page ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPage(navController: NavController) {
     val context = LocalContext.current
@@ -823,6 +826,7 @@ fun SettingsPage(navController: NavController) {
 }
 
 // --- Drawer Content ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
     Column(
