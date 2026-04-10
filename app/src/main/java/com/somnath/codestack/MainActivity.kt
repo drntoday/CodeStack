@@ -25,10 +25,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.FlightTakeoff // Used for Rocket
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FlightTakeoff // Rocket
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
@@ -40,7 +46,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,30 +66,14 @@ import com.google.ai.client.generativeai.type.content
 /**
  * CODESTACK - ADVANCED AI DEVELOPMENT ENVIRONMENT
  * ARCHITECTURE BY SOMNATH KURMI
- * VERSION: 2.1.0 (ENHANCED DASHBOARD & DRAWER)
+ * VERSION: 2.1.1 (FULL REFACTOR)
  */
 
-// --- Colors ---
-private val DeepSlate = Color(0xFF0f172a)
-private val ElectricBlue = Color(0xFF3B82F6)
-private val Violet = Color(0xFF8B5CF6)
-private val Slate = Color(0xFF64748B)
-
-// --- Navigation Setup ---
-sealed class Screen(val route: String) {
-    data object Dashboard : Screen("dashboard")
-    // Added query parameter support for mode
-    data object Terminal : Screen("terminal?isProjectMode={isProjectMode}") {
-        fun createRoute(isProjectMode: Boolean = false): String {
-            return "terminal?isProjectMode=$isProjectMode"
-        }
-    }
-    data object Vault : Screen("vault")
-    data object Settings : Screen("settings")
-    data object Editor : Screen("editor/{fileName}") {
-        fun createRoute(fileName: String) = "editor/$fileName"
-    }
-}
+// --- Theme & Colors ---
+private val DeepSlate = Color(0xFF0f172a) // Background
+private val ElectricBlue = Color(0xFF3B82F6) // Card A
+private val Violet = Color(0xFF8B5CF6) // Card B
+private val SlateCard = Color(0xFF64748B) // Card C
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
@@ -123,6 +112,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// --- Navigation Graph ---
+sealed class Screen(val route: String) {
+    data object Dashboard : Screen("dashboard")
+    data object Terminal : Screen("terminal?isProjectMode={isProjectMode}") {
+        fun createRoute(isProjectMode: Boolean = false): String {
+            return "terminal?isProjectMode=$isProjectMode"
+        }
+    }
+    data object Vault : Screen("vault")
+    data object Settings : Screen("settings")
+    data object Editor : Screen("editor/{fileName}") {
+        fun createRoute(fileName: String) = "editor/$fileName"
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodeStackApp() {
@@ -130,19 +134,15 @@ fun CodeStackApp() {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     
-    // Observe navigation changes
     val navBackStackEntry by navController.currentBackStackEntryFlow.collectAsState(initial = null)
     val currentRoute = navBackStackEntry?.destination?.route
     
-    // Helper to check if BottomBar should be shown (Dashboard, Terminal, Vault)
+    val isDashboard = currentRoute == Screen.Dashboard.route
     val showBottomBar = currentRoute in listOf(
         Screen.Dashboard.route, 
         Screen.Terminal.route, 
         Screen.Vault.route
     )
-    
-    // Check if we are on Dashboard to show Hamburger
-    val isDashboard = currentRoute == Screen.Dashboard.route
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -162,7 +162,6 @@ fun CodeStackApp() {
             topBar = {
                 when {
                     isDashboard -> {
-                        // Dashboard Top Bar with Hamburger
                         TopAppBar(
                             title = { 
                                 Text(
@@ -182,7 +181,6 @@ fun CodeStackApp() {
                         )
                     }
                     currentRoute?.contains("editor") == true -> {
-                        // Editor Top Bar
                         val fileName = navBackStackEntry?.arguments?.getString("fileName") ?: "Unknown"
                         TopAppBar(
                             title = { 
@@ -199,22 +197,11 @@ fun CodeStackApp() {
                             colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate)
                         )
                     }
-                    currentRoute == Screen.Settings.route -> {
-                        TopAppBar(
-                            title = { Text("SYSTEM SETTINGS", fontWeight = FontWeight.Bold) },
-                            navigationIcon = {
-                                IconButton(onClick = { navController.navigateUp() }) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate)
-                        )
-                    }
                     else -> {
-                        // Generic Top Bar (Terminal, Vault)
                         val title = when (currentRoute) {
                             Screen.Terminal.route -> "TERMINAL"
                             Screen.Vault.route -> "QUANTUM VAULT"
+                            Screen.Settings.route -> "SETTINGS"
                             else -> "CODESTACK"
                         }
                         TopAppBar(
@@ -238,14 +225,14 @@ fun CodeStackApp() {
                         NavigationBarItem(
                             selected = isDashboard,
                             onClick = { navController.navigate(Screen.Dashboard.route) { popUpTo(Screen.Dashboard.route) } },
-                            label = { Text("HOME") },
+                            label = { Text("DASHBOARD") },
                             icon = { Icon(Icons.Default.Menu, contentDescription = null) } 
                         )
                         NavigationBarItem(
                             selected = currentRoute == Screen.Terminal.route,
                             onClick = { navController.navigate(Screen.Terminal.createRoute(false)) },
                             label = { Text("TERMINAL") },
-                            icon = { Icon(Icons.Default.ChatBubble, contentDescription = null) }
+                            icon = { Icon(Icons.Default.Chat, contentDescription = null) }
                         )
                         NavigationBarItem(
                             selected = currentRoute == Screen.Vault.route,
@@ -296,7 +283,7 @@ fun CodeStackApp() {
     }
 }
 
-// --- New Dashboard Page Implementation ---
+// --- Pages ---
 
 @Composable
 fun DashboardPage(navController: NavController) {
@@ -307,7 +294,7 @@ fun DashboardPage(navController: NavController) {
             .background(DeepSlate),
         horizontalAlignment = Alignment.Start
     ) {
-        // Header Section
+        // Header
         Text(
             "Welcome back, Developer",
             style = MaterialTheme.typography.headlineMedium,
@@ -333,12 +320,12 @@ fun DashboardPage(navController: NavController) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            // Card A: New Project
+            // Card A: Initialize Project
             item {
                 ActionCard(
                     title = "Initialize Project",
                     description = "Start an autonomous development session.",
-                    icon = Icons.Default.FlightTakeoff, // Rocket proxy
+                    icon = Icons.Default.FlightTakeoff, // Rocket
                     iconColor = ElectricBlue,
                     onClick = { 
                         navController.navigate(Screen.Terminal.createRoute(true)) 
@@ -346,7 +333,7 @@ fun DashboardPage(navController: NavController) {
                 )
             }
             
-            // Card B: AI Chat
+            // Card B: General Query
             item {
                 ActionCard(
                     title = "General Query",
@@ -359,14 +346,14 @@ fun DashboardPage(navController: NavController) {
                 )
             }
             
-            // Card C: Config (Spans 2 columns)
+            // Card C: Settings (Full width)
             item(span = { GridItemSpan(2) }) {
                 ActionCard(
                     modifier = Modifier.fillMaxWidth(),
                     title = "System Settings",
                     description = "Manage Gemini and GitHub API Credentials.",
                     icon = Icons.Default.Settings,
-                    iconColor = Slate,
+                    iconColor = SlateCard,
                     onClick = { 
                         navController.navigate(Screen.Settings.route) 
                     }
@@ -399,7 +386,7 @@ fun ActionCard(
         onClick = onClick,
         modifier = modifier
             .scale(scale)
-            .height(140.dp) // Fixed height for consistency
+            .height(140.dp)
             .border(
                 width = 1.dp,
                 color = iconColor.copy(alpha = 0.3f),
@@ -407,7 +394,7 @@ fun ActionCard(
             ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E293B) // Slightly lighter slate for card bg
+            containerColor = Color(0xFF1E293B) 
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 4.dp,
@@ -421,7 +408,6 @@ fun ActionCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon Container
             Surface(
                 modifier = Modifier.size(48.dp),
                 color = iconColor.copy(alpha = 0.15f),
@@ -437,7 +423,6 @@ fun ActionCard(
             
             Spacer(modifier = Modifier.width(16.dp))
             
-            // Text Column
             Column(
                 verticalArrangement = Arrangement.Center
             ) {
@@ -459,61 +444,6 @@ fun ActionCard(
     }
 }
 
-// --- Drawer Content ---
-@Composable
-fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(280.dp)
-            .background(Color(0xFF0B1120))
-            .padding(16.dp)
-    ) {
-        Text(
-            "CODESTACK",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(vertical = 24.dp)
-        )
-        
-        Divider(color = Color.Gray.copy(alpha = 0.2f))
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        DrawerItem(icon = Icons.Default.Menu, label = "Dashboard", route = Screen.Dashboard.route, onNavigate, onClose)
-        DrawerItem(icon = Icons.Default.ChatBubble, label = "AI Terminal", route = Screen.Terminal.createRoute(false), onNavigate, onClose)
-        DrawerItem(icon = Icons.Default.Code, label = "Vault", route = Screen.Vault.route, onNavigate, onClose)
-        DrawerItem(icon = Icons.Outlined.Settings, label = "Configuration", route = Screen.Settings.route, onNavigate, onClose)
-        
-        Spacer(modifier = Modifier.weight(1f))
-        
-        Divider(color = Color.Gray.copy(alpha = 0.2f))
-        
-        DrawerItem(icon = Icons.AutoMirrored.Filled.ExitToApp, label = "Exit App", route = "", onNavigate = {
-             // Handle exit logic if needed
-        }, onClose)
-    }
-}
-
-@Composable
-fun DrawerItem(icon: ImageVector, label: String, route: String, onNavigate: (String) -> Unit, onClose: () -> Unit) {
-    TextButton(
-        onClick = {
-            if (route.isNotEmpty()) onNavigate(route)
-            onClose()
-        },
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-    ) {
-        Icon(icon, contentDescription = null, tint = Color.Gray)
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
-// --- Other Pages (Updated to handle arguments if necessary) ---
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalPage(navController: NavController, isProjectMode: Boolean) {
@@ -527,7 +457,6 @@ fun TerminalPage(navController: NavController, isProjectMode: Boolean) {
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Auto-send welcome message based on mode
     LaunchedEffect(Unit) {
         if (messages.isEmpty()) {
             val welcomeMsg = if (isProjectMode) {
@@ -578,7 +507,6 @@ fun TerminalPage(navController: NavController, isProjectMode: Boolean) {
         val aiIndex = messages.size
         messages.add(ChatMessage("ANALYZING SYSTEM PARAMETERS...", false))
 
-        // Adjust System Instruction based on Mode
         val systemInstruction = if (isProjectMode) {
             "You are an Autonomous Project Architect. Your goal is to write complete, production-ready code files based on user requirements. Prioritize architecture and scalability."
         } else {
@@ -699,7 +627,7 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp)) // Re-using icon as Save
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("SAVE TO VAULT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
@@ -731,7 +659,7 @@ fun VaultPage(navController: NavController) {
         
         if (files.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("VAULT EMPTY", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                Text("VAULT EMPTY - AWAITING DATA INGESTION", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -747,10 +675,14 @@ fun VaultPage(navController: NavController) {
                     ListItem(
                         headlineContent = { Text(file.name, fontWeight = FontWeight.Bold, color = Color.White) },
                         supportingContent = { 
-                            Text("${file.length() / 1024} KB", fontSize = 10.sp, color = Color.Gray) 
+                            Text("SIZE: ${file.length() / 1024} KB | TYPE: ${file.extension.uppercase()}", fontSize = 10.sp, color = Color.Gray) 
                         },
                         leadingContent = { 
-                            Icon(Icons.Default.Code, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Icon(
+                                imageVector = if (file.extension == "kt") Icons.Default.Code else Icons.Default.Description,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         },
                         trailingContent = {
                             IconButton(onClick = { 
@@ -758,7 +690,7 @@ fun VaultPage(navController: NavController) {
                                 files.remove(file)
                                 Toast.makeText(context, "ASSET PURGED", Toast.LENGTH_SHORT).show()
                             }) {
-                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Red.copy(alpha = 0.7f))
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Red.copy(alpha = 0.7f))
                             }
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -775,35 +707,62 @@ fun EditorPage(navController: NavController, fileName: String) {
     val file = remember(fileName) {
         File(context.getExternalFilesDir(null), "Projects/$fileName")
     }
-    var codeText by remember { mutableStateOf(if (file.exists()) file.readText() else "") }
+    var codeText by remember { mutableStateOf(if (file.exists()) file.readText() else "// New Project File\n\nfun main() {\n    \n}") }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text(fileName, fontSize = 11.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+            Surface(
+                color = Color(0xFF334155),
+                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+            ) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Code, null, modifier = Modifier.size(12.dp), tint = Color.Cyan)
+                    Spacer(Modifier.width(8.dp))
+                    Text(fileName, fontSize = 11.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                }
+            }
         }
+
         Box(modifier = Modifier.weight(1f).padding(4.dp)) {
             TextField(
                 value = codeText,
                 onValueChange = { codeText = it },
                 modifier = Modifier.fillMaxSize(),
-                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = Color.White),
+                textStyle = LocalTextStyle.current.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    color = Color(0xFFCECECE),
+                    lineHeight = 18.sp
+                ),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = MaterialTheme.colorScheme.primary
                 )
             )
         }
-        Surface(tonalElevation = 16.dp, color = Color(0xFF1E293B)) {
-            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.End) {
+        
+        Surface(
+            tonalElevation = 16.dp, 
+            color = Color(0xFF1E293B),
+            modifier = Modifier.navigationBarsPadding()
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("UTF-8 | Kotlin Script", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 Button(
                     onClick = { MainActivity.saveCodeToFile(context, fileName, codeText) },
+                    shape = RoundedCornerShape(4.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.Settings, contentDescription = null, tint = Color.Black) // Save placeholder
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.Black)
                     Spacer(Modifier.width(8.dp))
-                    Text("SAVE", color = Color.Black)
+                    Text("COMMIT CHANGES", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
         }
@@ -816,15 +775,100 @@ fun SettingsPage(navController: NavController) {
     var apiKey by remember { mutableStateOf(getApiKey(context)) }
     
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("API CONFIGURATION", style = MaterialTheme.typography.headlineSmall)
+        Text("API CONFIGURATION", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(24.dp))
-        OutlinedTextField(value = apiKey, onValueChange = { apiKey = it }, label = { Text("Gemini API Key") }, modifier = Modifier.fillMaxWidth())
+        
+        OutlinedTextField(
+            value = apiKey,
+            onValueChange = { apiKey = it },
+            label = { Text("Gemini API Key") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary
+            )
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        OutlinedTextField(
+            value = "", 
+            onValueChange = { },
+            label = { Text("GitHub Personal Access Token") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = false 
+        )
+        
         Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = { saveApiKey(context, apiKey); navController.popBackStack() }, modifier = Modifier.fillMaxWidth()) {
-            Text("SAVE")
+        
+        Button(
+            onClick = {
+                saveApiKey(context, apiKey)
+                Toast.makeText(context, "CONFIGURATION SAVED", Toast.LENGTH_SHORT).show()
+                navController.popBackStack()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+        ) {
+            Text("SAVE CONFIGURATION")
         }
     }
 }
 
+// --- Drawer Content ---
+@Composable
+fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(280.dp)
+            .background(Color(0xFF0B1120)) // Darker than Deep Slate
+            .padding(16.dp)
+    ) {
+        Text(
+            "CODESTACK",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(vertical = 24.dp)
+        )
+        
+        Divider(color = Color.Gray.copy(alpha = 0.2f))
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        DrawerItem(icon = Icons.Default.Menu, label = "Dashboard", route = Screen.Dashboard.route, onNavigate, onClose)
+        DrawerItem(icon = Icons.Default.Chat, label = "AI Terminal", route = Screen.Terminal.createRoute(false), onNavigate, onClose)
+        DrawerItem(icon = Icons.Default.Code, label = "Vault", route = Screen.Vault.route, onNavigate, onClose)
+        DrawerItem(icon = Icons.Outlined.Settings, label = "Configuration", route = Screen.Settings.route, onNavigate, onClose)
+        
+        Spacer(modifier = Modifier.weight(1f))
+        
+        Divider(color = Color.Gray.copy(alpha = 0.2f))
+        
+        DrawerItem(icon = Icons.AutoMirrored.Filled.ExitToApp, label = "Exit App", route = "", onNavigate = {
+             // Handle exit logic
+        }, onClose)
+    }
+}
+
+@Composable
+fun DrawerItem(icon: ImageVector, label: String, route: String, onNavigate: (String) -> Unit, onClose: () -> Unit) {
+    TextButton(
+        onClick = {
+            if (route.isNotEmpty()) onNavigate(route)
+            onClose()
+        },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.Gray)
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+// --- Helpers ---
 private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("cs_prefs", 0).edit().putString("key", k).apply()
 private fun getApiKey(c: Context) = c.getSharedPreferences("cs_prefs", 0).getString("key", "") ?: ""
