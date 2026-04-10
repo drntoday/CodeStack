@@ -6,31 +6,41 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Create
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.FlightTakeoff // Used for Rocket
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,13 +61,24 @@ import com.google.ai.client.generativeai.type.content
 /**
  * CODESTACK - ADVANCED AI DEVELOPMENT ENVIRONMENT
  * ARCHITECTURE BY SOMNATH KURMI
- * VERSION: 2.0.0 (NAVIGATION COMPONENT ENABLED)
+ * VERSION: 2.1.0 (ENHANCED DASHBOARD & DRAWER)
  */
+
+// --- Colors ---
+private val DeepSlate = Color(0xFF0f172a)
+private val ElectricBlue = Color(0xFF3B82F6)
+private val Violet = Color(0xFF8B5CF6)
+private val Slate = Color(0xFF64748B)
 
 // --- Navigation Setup ---
 sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
-    data object Terminal : Screen("terminal")
+    // Added query parameter support for mode
+    data object Terminal : Screen("terminal?isProjectMode={isProjectMode}") {
+        fun createRoute(isProjectMode: Boolean = false): String {
+            return "terminal?isProjectMode=$isProjectMode"
+        }
+    }
     data object Vault : Screen("vault")
     data object Settings : Screen("settings")
     data object Editor : Screen("editor/{fileName}") {
@@ -65,7 +86,6 @@ sealed class Screen(val route: String) {
     }
 }
 
-// --- Data Models ---
 data class ChatMessage(val text: String, val isUser: Boolean)
 
 class MainActivity : ComponentActivity() {
@@ -77,10 +97,10 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(
                 colorScheme = darkColorScheme(
                     primary = Color(0xFF00E5FF),
-                    secondary = Color(0xFF7C4DFF),
+                    secondary = Violet,
                     tertiary = Color(0xFFFFAB40),
-                    surface = Color(0xFF121212),
-                    background = Color(0xFF0A0A0A)
+                    surface = Color(0xFF1E293B),
+                    background = DeepSlate
                 )
             ) {
                 CodeStackApp()
@@ -107,263 +127,396 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CodeStackApp() {
     val navController = rememberNavController()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     
-    // Observe navigation changes to update TopBar and BottomBar visibility
+    // Observe navigation changes
     val navBackStackEntry by navController.currentBackStackEntryFlow.collectAsState(initial = null)
     val currentRoute = navBackStackEntry?.destination?.route
     
-    // Helper to check if BottomBar should be shown
+    // Helper to check if BottomBar should be shown (Dashboard, Terminal, Vault)
     val showBottomBar = currentRoute in listOf(
         Screen.Dashboard.route, 
         Screen.Terminal.route, 
         Screen.Vault.route
     )
+    
+    // Check if we are on Dashboard to show Hamburger
+    val isDashboard = currentRoute == Screen.Dashboard.route
 
-    Scaffold(
-        topBar = {
-            when (currentRoute) {
-                Screen.Dashboard.route -> {
-                    // Brand Logo / Title for Dashboard
-                    CenterAlignedTopAppBar(
-                        title = {
-                            Text(
-                                "CODESTACK",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.primary,
-                                letterSpacing = 2.sp
-                            )
-                        },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = Color(0xFF121212)
-                        )
-                    )
-                }
-                else -> {
-                    // Back Arrow for all other pages
-                    val title = when (currentRoute) {
-                        Screen.Editor.route -> "EDITOR"
-                        Screen.Settings.route -> "SETTINGS"
-                        Screen.Terminal.route -> "TERMINAL"
-                        Screen.Vault.route -> "QUANTUM VAULT"
-                        else -> "CODESTACK"
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            DrawerContent(
+                onNavigate = { route ->
+                    scope.launch { drawerState.close() }
+                    navController.navigate(route) {
+                        popUpTo(Screen.Dashboard.route) { inclusive = false }
                     }
-                    
-                    TopAppBar(
-                        title = { Text(title, fontWeight = FontWeight.Bold) },
-                        navigationIcon = {
-                            IconButton(onClick = { navController.navigateUp() }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212))
-                    )
-                }
-            }
-        },
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = Color(0xFF121212),
-                    modifier = Modifier.navigationBarsPadding()
-                ) {
-                    NavigationBarItem(
-                        selected = currentRoute == Screen.Dashboard.route,
-                        onClick = { navController.navigate(Screen.Dashboard.route) { popUpTo(Screen.Dashboard.route) } },
-                        label = { Text("DASHBOARD") },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = null) } // Using Settings icon for Home/Dashboard
-                    )
-                    NavigationBarItem(
-                        selected = currentRoute == Screen.Terminal.route,
-                        onClick = { navController.navigate(Screen.Terminal.route) },
-                        label = { Text("TERMINAL") },
-                        icon = { Icon(Icons.Default.Send, contentDescription = null) }
-                    )
-                    NavigationBarItem(
-                        selected = currentRoute == Screen.Vault.route,
-                        onClick = { navController.navigate(Screen.Vault.route) },
-                        label = { Text("VAULT") },
-                        icon = { Icon(Icons.Default.Code, contentDescription = null) }
-                    )
-                }
-            }
+                },
+                onClose = { scope.launch { drawerState.close() } }
+            )
         }
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(Color(0xFF0A0A0A))) {
-            NavHost(
-                navController = navController,
-                startDestination = Screen.Dashboard.route
-            ) {
-                composable(Screen.Dashboard.route) {
-                    DashboardPage(navController)
+    ) {
+        Scaffold(
+            topBar = {
+                when {
+                    isDashboard -> {
+                        // Dashboard Top Bar with Hamburger
+                        TopAppBar(
+                            title = { 
+                                Text(
+                                    "CODESTACK", 
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    letterSpacing = 2.sp
+                                )
+                            },
+                            navigationIcon = {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Default.Menu, contentDescription = "Menu")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate)
+                        )
+                    }
+                    currentRoute?.contains("editor") == true -> {
+                        // Editor Top Bar
+                        val fileName = navBackStackEntry?.arguments?.getString("fileName") ?: "Unknown"
+                        TopAppBar(
+                            title = { 
+                                Column {
+                                    Text("EDITOR", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    Text(fileName, style = MaterialTheme.typography.titleMedium)
+                                }
+                            },
+                            navigationIcon = {
+                                IconButton(onClick = { navController.navigateUp() }) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate)
+                        )
+                    }
+                    currentRoute == Screen.Settings.route -> {
+                        TopAppBar(
+                            title = { Text("SYSTEM SETTINGS", fontWeight = FontWeight.Bold) },
+                            navigationIcon = {
+                                IconButton(onClick = { navController.navigateUp() }) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate)
+                        )
+                    }
+                    else -> {
+                        // Generic Top Bar (Terminal, Vault)
+                        val title = when (currentRoute) {
+                            Screen.Terminal.route -> "TERMINAL"
+                            Screen.Vault.route -> "QUANTUM VAULT"
+                            else -> "CODESTACK"
+                        }
+                        TopAppBar(
+                            title = { Text(title, fontWeight = FontWeight.Bold) },
+                            navigationIcon = {
+                                IconButton(onClick = { navController.navigateUp() }) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate)
+                        )
+                    }
                 }
-                composable(Screen.Terminal.route) {
-                    TerminalPage(navController)
+            },
+            bottomBar = {
+                if (showBottomBar) {
+                    NavigationBar(
+                        containerColor = DeepSlate,
+                        modifier = Modifier.navigationBarsPadding()
+                    ) {
+                        NavigationBarItem(
+                            selected = isDashboard,
+                            onClick = { navController.navigate(Screen.Dashboard.route) { popUpTo(Screen.Dashboard.route) } },
+                            label = { Text("HOME") },
+                            icon = { Icon(Icons.Default.Menu, contentDescription = null) } 
+                        )
+                        NavigationBarItem(
+                            selected = currentRoute == Screen.Terminal.route,
+                            onClick = { navController.navigate(Screen.Terminal.createRoute(false)) },
+                            label = { Text("TERMINAL") },
+                            icon = { Icon(Icons.Default.ChatBubble, contentDescription = null) }
+                        )
+                        NavigationBarItem(
+                            selected = currentRoute == Screen.Vault.route,
+                            onClick = { navController.navigate(Screen.Vault.route) },
+                            label = { Text("VAULT") },
+                            icon = { Icon(Icons.Default.Code, contentDescription = null) }
+                        )
+                    }
                 }
-                composable(Screen.Vault.route) {
-                    VaultPage(navController)
-                }
-                composable(
-                    route = Screen.Editor.route,
-                    arguments = listOf(navArgument("fileName") { type = NavType.StringType })
-                ) { backStackEntry ->
-                    val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
-                    EditorPage(navController, fileName)
-                }
-                composable(Screen.Settings.route) {
-                    SettingsPage(navController)
+            }
+        ) { paddingValues ->
+            Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(DeepSlate)) {
+                NavHost(
+                    navController = navController,
+                    startDestination = Screen.Dashboard.route
+                ) {
+                    composable(Screen.Dashboard.route) {
+                        DashboardPage(navController)
+                    }
+                    composable(
+                        route = Screen.Terminal.route,
+                        arguments = listOf(
+                            navArgument("isProjectMode") { 
+                                type = NavType.BoolType 
+                                defaultValue = false 
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val isProjectMode = backStackEntry.arguments?.getBoolean("isProjectMode") ?: false
+                        TerminalPage(navController, isProjectMode)
+                    }
+                    composable(Screen.Vault.route) {
+                        VaultPage(navController)
+                    }
+                    composable(
+                        route = Screen.Editor.route,
+                        arguments = listOf(navArgument("fileName") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
+                        EditorPage(navController, fileName)
+                    }
+                    composable(Screen.Settings.route) {
+                        SettingsPage(navController)
+                    }
                 }
             }
         }
     }
 }
 
-// --- Modularized Pages ---
+// --- New Dashboard Page Implementation ---
 
 @Composable
 fun DashboardPage(navController: NavController) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .background(DeepSlate),
+        horizontalAlignment = Alignment.Start
     ) {
+        // Header Section
         Text(
-            "SELECT PROTOCOL", 
-            style = MaterialTheme.typography.titleMedium, 
+            "Welcome back, Developer",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            "System Status: Optimal | Ready for Deployment",
+            style = MaterialTheme.typography.bodyMedium,
             color = Color.Gray,
-            letterSpacing = 1.sp
+            letterSpacing = 0.5.sp
         )
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        // Action Grid
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize()
         ) {
-            // New Project Card
-            DashboardCard(
-                modifier = Modifier.weight(1f),
-                title = "New Project",
-                icon = Icons.Default.Create,
-                color = MaterialTheme.colorScheme.primary,
-                onClick = {
-                    val newFileName = "Project_${System.currentTimeMillis()}.kt"
-                    navController.navigate(Screen.Editor.createRoute(newFileName))
-                }
-            )
+            // Card A: New Project
+            item {
+                ActionCard(
+                    title = "Initialize Project",
+                    description = "Start an autonomous development session.",
+                    icon = Icons.Default.FlightTakeoff, // Rocket proxy
+                    iconColor = ElectricBlue,
+                    onClick = { 
+                        navController.navigate(Screen.Terminal.createRoute(true)) 
+                    }
+                )
+            }
             
-            // AI Chat Card
-            DashboardCard(
-                modifier = Modifier.weight(1f),
-                title = "AI Chat",
-                icon = Icons.Default.Chat,
-                color = MaterialTheme.colorScheme.secondary,
-                onClick = { navController.navigate(Screen.Terminal.route) }
-            )
+            // Card B: AI Chat
+            item {
+                ActionCard(
+                    title = "General Query",
+                    description = "Consult CodeStack AI for logic or debugging.",
+                    icon = Icons.Default.ChatBubble,
+                    iconColor = Violet,
+                    onClick = { 
+                        navController.navigate(Screen.Terminal.createRoute(false)) 
+                    }
+                )
+            }
+            
+            // Card C: Config (Spans 2 columns)
+            item(span = { GridItemSpan(2) }) {
+                ActionCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    title = "System Settings",
+                    description = "Manage Gemini and GitHub API Credentials.",
+                    icon = Icons.Default.Settings,
+                    iconColor = Slate,
+                    onClick = { 
+                        navController.navigate(Screen.Settings.route) 
+                    }
+                )
+            }
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Settings Card
-        DashboardCard(
-            modifier = Modifier.fillMaxWidth(),
-            title = "System Configuration",
-            icon = Icons.Default.Key,
-            color = MaterialTheme.colorScheme.tertiary,
-            onClick = { navController.navigate(Screen.Settings.route) }
-        )
     }
 }
 
 @Composable
-fun DashboardCard(
+fun ActionCard(
     modifier: Modifier = Modifier,
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color,
+    description: String,
+    icon: ImageVector,
+    iconColor: Color,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    // Lift Effect Animation
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = tween(durationMillis = 150),
+        label = "scale"
+    )
+
     Card(
+        onClick = onClick,
         modifier = modifier
-            .height(120.dp)
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(12.dp)
+            .scale(scale)
+            .height(140.dp) // Fixed height for consistency
+            .border(
+                width = 1.dp,
+                color = iconColor.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1E293B) // Slightly lighter slate for card bg
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp,
+            pressedElevation = 8.dp
+        ),
+        interactionSource = interactionSource
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
+            // Icon Container
+            Surface(
+                modifier = Modifier.size(48.dp),
+                color = iconColor.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            // Text Column
+            Column(
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    lineHeight = 14.sp
+                )
+            }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// --- Drawer Content ---
 @Composable
-fun SettingsPage(navController: NavController) {
-    val context = LocalContext.current
-    var apiKey by remember { mutableStateOf(getApiKey(context)) }
-    
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("API CONFIGURATION", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        OutlinedTextField(
-            value = apiKey,
-            onValueChange = { apiKey = it },
-            label = { Text("Gemini API Key") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary
-            )
+fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(280.dp)
+            .background(Color(0xFF0B1120))
+            .padding(16.dp)
+    ) {
+        Text(
+            "CODESTACK",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(vertical = 24.dp)
         )
+        
+        Divider(color = Color.Gray.copy(alpha = 0.2f))
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        OutlinedTextField(
-            value = "", // Placeholder for GitHub key
-            onValueChange = { },
-            label = { Text("GitHub Personal Access Token") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            enabled = false // Visual placeholder as per requirements
-        )
+        DrawerItem(icon = Icons.Default.Menu, label = "Dashboard", route = Screen.Dashboard.route, onNavigate, onClose)
+        DrawerItem(icon = Icons.Default.ChatBubble, label = "AI Terminal", route = Screen.Terminal.createRoute(false), onNavigate, onClose)
+        DrawerItem(icon = Icons.Default.Code, label = "Vault", route = Screen.Vault.route, onNavigate, onClose)
+        DrawerItem(icon = Icons.Outlined.Settings, label = "Configuration", route = Screen.Settings.route, onNavigate, onClose)
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
         
-        Button(
-            onClick = {
-                saveApiKey(context, apiKey)
-                Toast.makeText(context, "CONFIGURATION SAVED", Toast.LENGTH_SHORT).show()
-                navController.popBackStack()
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-        ) {
-            Text("SAVE CONFIGURATION")
-        }
+        Divider(color = Color.Gray.copy(alpha = 0.2f))
+        
+        DrawerItem(icon = Icons.AutoMirrored.Filled.ExitToApp, label = "Exit App", route = "", onNavigate = {
+             // Handle exit logic if needed
+        }, onClose)
     }
 }
 
+@Composable
+fun DrawerItem(icon: ImageVector, label: String, route: String, onNavigate: (String) -> Unit, onClose: () -> Unit) {
+    TextButton(
+        onClick = {
+            if (route.isNotEmpty()) onNavigate(route)
+            onClose()
+        },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.Gray)
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+// --- Other Pages (Updated to handle arguments if necessary) ---
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TerminalPage(navController: NavController) {
+fun TerminalPage(navController: NavController, isProjectMode: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
@@ -373,6 +526,18 @@ fun TerminalPage(navController: NavController) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
+
+    // Auto-send welcome message based on mode
+    LaunchedEffect(Unit) {
+        if (messages.isEmpty()) {
+            val welcomeMsg = if (isProjectMode) {
+                "INITIATING AUTONOMOUS DEVELOPMENT PROTOCOL. PLEASE DEFINE PROJECT REQUIREMENTS."
+            } else {
+                "SYSTEM ONLINE. READY FOR LOGIC CONSULTATION AND DEBUGGING."
+            }
+            messages.add(ChatMessage(welcomeMsg, false))
+        }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
@@ -413,19 +578,19 @@ fun TerminalPage(navController: NavController) {
         val aiIndex = messages.size
         messages.add(ChatMessage("ANALYZING SYSTEM PARAMETERS...", false))
 
+        // Adjust System Instruction based on Mode
+        val systemInstruction = if (isProjectMode) {
+            "You are an Autonomous Project Architect. Your goal is to write complete, production-ready code files based on user requirements. Prioritize architecture and scalability."
+        } else {
+            "You are CodeStack AI, a Senior Software Architect. You assist with logic, debugging, and code explanation."
+        }
+
         scope.launch {
             try {
                 val model = GenerativeModel(
                     modelName = "gemini-3.1-flash-lite-preview", 
                     apiKey = apiKey,
-                    systemInstruction = content {
-                        text("""
-                            You are CodeStack AI, a Senior Software Architect developed by Somnath Kurmi. 
-                            Domain Expertise: Android (Kotlin/Compose), Full-stack, ML, and Cloud Infrastructure.
-                            Persona: Highly technical, clean code advocate, providing industrial-grade solutions.
-                            Response Format: Always provide code in markdown blocks with language identifiers.
-                        """.trimIndent())
-                    }
+                    systemInstruction = content { text(systemInstruction) }
                 )
                 
                 messages[aiIndex] = ChatMessage("", false)
@@ -455,7 +620,7 @@ fun TerminalPage(navController: NavController) {
 
         Surface(
             tonalElevation = 12.dp, 
-            color = Color(0xFF121212),
+            color = Color(0xFF1E293B),
             modifier = Modifier.imePadding()
         ) {
             Row(
@@ -466,7 +631,7 @@ fun TerminalPage(navController: NavController) {
                     value = inputText,
                     onValueChange = { inputText = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Initialize command Sequence...") },
+                    placeholder = { Text(if (isProjectMode) "Enter project spec..." else "Ask anything...") },
                     enabled = !isGenerating,
                     shape = RoundedCornerShape(12.dp),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
@@ -492,8 +657,7 @@ fun TerminalPage(navController: NavController) {
 @Composable
 fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
     val horizontalAlign = if (msg.isUser) Alignment.End else Alignment.Start
-    val bgColor = if (msg.isUser) Color(0xFF1E1E1E) else Color(0xFF2D2D2D)
-    val borderColor = if (msg.isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else Color.Transparent
+    val bgColor = if (msg.isUser) Color(0xFF334155) else Color(0xFF475569)
     
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -502,9 +666,7 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
         Card(
             shape = RoundedCornerShape(if (msg.isUser) 16.dp else 4.dp), 
             colors = CardDefaults.cardColors(containerColor = bgColor),
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .border(1.dp, borderColor, RoundedCornerShape(if (msg.isUser) 16.dp else 4.dp))
+            modifier = Modifier.widthIn(max = 320.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
@@ -537,9 +699,9 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp)) // Re-using icon as Save
                         Spacer(Modifier.width(8.dp))
-                        Text("DECRYPT & SAVE TO VAULT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("SAVE TO VAULT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -565,11 +727,11 @@ fun VaultPage(navController: NavController) {
             Text("VAULT STATUS: ONLINE", style = MaterialTheme.typography.labelSmall, color = Color.Green)
         }
         
-        Spacer(Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
         if (files.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("VAULT EMPTY - AWAITING DATA INGESTION", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                Text("VAULT EMPTY", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -579,20 +741,16 @@ fun VaultPage(navController: NavController) {
                     modifier = Modifier.fillMaxWidth().clickable { 
                         navController.navigate(Screen.Editor.createRoute(file.name)) 
                     },
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     ListItem(
                         headlineContent = { Text(file.name, fontWeight = FontWeight.Bold, color = Color.White) },
                         supportingContent = { 
-                            Text("SIZE: ${file.length() / 1024} KB | TYPE: ${file.extension.uppercase()}", fontSize = 10.sp, color = Color.Gray) 
+                            Text("${file.length() / 1024} KB", fontSize = 10.sp, color = Color.Gray) 
                         },
                         leadingContent = { 
-                            Icon(
-                                imageVector = if (file.extension == "kt") Icons.Default.Code else Icons.Default.Description,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Default.Code, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         },
                         trailingContent = {
                             IconButton(onClick = { 
@@ -600,7 +758,7 @@ fun VaultPage(navController: NavController) {
                                 files.remove(file)
                                 Toast.makeText(context, "ASSET PURGED", Toast.LENGTH_SHORT).show()
                             }) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Red.copy(alpha = 0.7f))
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Red.copy(alpha = 0.7f))
                             }
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -614,81 +772,59 @@ fun VaultPage(navController: NavController) {
 @Composable
 fun EditorPage(navController: NavController, fileName: String) {
     val context = LocalContext.current
-    
-    // Reconstruct file path
     val file = remember(fileName) {
         File(context.getExternalFilesDir(null), "Projects/$fileName")
     }
-    
-    var codeText by remember { mutableStateOf(if (file.exists()) file.readText() else "// New Project File\n\nfun main() {\n    \n}") }
+    var codeText by remember { mutableStateOf(if (file.exists()) file.readText() else "") }
 
-    Column(Modifier.fillMaxSize().background(Color(0xFF0D0D0D))) {
-        // IDE-style Tab Header
-        Row(Modifier.fillMaxWidth().background(Color(0xFF1A1A1A)).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Surface(
-                color = Color(0xFF2D2D2D),
-                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-            ) {
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Code, null, modifier = Modifier.size(12.dp), tint = Color.Cyan)
-                    Spacer(Modifier.width(8.dp))
-                    Text(fileName, fontSize = 11.sp, color = Color.White, fontFamily = FontFamily.Monospace)
-                }
-            }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Text(fileName, fontSize = 11.sp, color = Color.White, fontFamily = FontFamily.Monospace)
         }
-
-        // Code Editor Surface
-        Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(4.dp)) {
+        Box(modifier = Modifier.weight(1f).padding(4.dp)) {
             TextField(
                 value = codeText,
                 onValueChange = { codeText = it },
                 modifier = Modifier.fillMaxSize(),
-                textStyle = LocalTextStyle.current.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    color = Color(0xFFCECECE),
-                    lineHeight = 18.sp
-                ),
+                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = Color.White),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.primary
+                    unfocusedIndicatorColor = Color.Transparent
                 )
             )
         }
-        
-        // Editor Controls
-        Surface(
-            tonalElevation = 16.dp, 
-            color = Color(0xFF121212),
-            modifier = Modifier.navigationBarsPadding()
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("UTF-8 | Kotlin Script", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Surface(tonalElevation = 16.dp, color = Color(0xFF1E293B)) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.End) {
                 Button(
-                    onClick = {
-                        MainActivity.saveCodeToFile(context, fileName, codeText)
-                        // Optional: Navigate back to vault after save? 
-                        // Keeping user on editor to allow continued editing is usually better UX.
-                    },
-                    shape = RoundedCornerShape(4.dp),
+                    onClick = { MainActivity.saveCodeToFile(context, fileName, codeText) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.Black)
+                    Icon(Icons.Default.Settings, contentDescription = null, tint = Color.Black) // Save placeholder
                     Spacer(Modifier.width(8.dp))
-                    Text("COMMIT CHANGES", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("SAVE", color = Color.Black)
                 }
             }
         }
     }
 }
 
-// --- Helpers ---
+@Composable
+fun SettingsPage(navController: NavController) {
+    val context = LocalContext.current
+    var apiKey by remember { mutableStateOf(getApiKey(context)) }
+    
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Text("API CONFIGURATION", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(24.dp))
+        OutlinedTextField(value = apiKey, onValueChange = { apiKey = it }, label = { Text("Gemini API Key") }, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(onClick = { saveApiKey(context, apiKey); navController.popBackStack() }, modifier = Modifier.fillMaxWidth()) {
+            Text("SAVE")
+        }
+    }
+}
+
 private fun saveApiKey(c: Context, k: String) = c.getSharedPreferences("cs_prefs", 0).edit().putString("key", k).apply()
 private fun getApiKey(c: Context) = c.getSharedPreferences("cs_prefs", 0).getString("key", "") ?: ""
