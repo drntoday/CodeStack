@@ -37,7 +37,8 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
+        // Updated to 1.5.11 for better stability with Kotlin 1.9.22+
+        kotlinCompilerExtensionVersion = "1.5.11"
     }
     packaging {
         resources {
@@ -47,8 +48,13 @@ android {
 }
 
 dependencies {
-    // THE GOOGLE AI SDK
+    // THE GOOGLE AI SDK (Stable version for April 2026)
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+
+    // --- ADDED THESE TO FIX THE THEME ERRORS ---
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    // -------------------------------------------
 
     // AndroidX & Compose (Standard Versions)
     implementation("androidx.core:core-ktx:1.12.0")
@@ -59,4 +65,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    
+    // UI Tooling for development
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
