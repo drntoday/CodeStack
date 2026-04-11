@@ -8,3 +8,4 @@ val Violet = Color(0xFF8B5CF6)
 val SlateCard = Color(0xFF64748B)
 val Emerald = Color(0xFF10b981)
 val TerminalGreen = Color(0xFF00FF00)
+val Pink = Color(0xFFFF4081) // Added for Light Theme support
