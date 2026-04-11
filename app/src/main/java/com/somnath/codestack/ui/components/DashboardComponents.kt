@@ -1,50 +1,34 @@
 package com.somnath.codestack.ui.components
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DrawerState
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import androidx.navigation.compose.currentBackStackEntryAsState
+import com.somnath.codestack.Screen
 import com.somnath.codestack.ui.theme.DeepSlate
 import com.somnath.codestack.ui.theme.ElectricBlue
 import com.somnath.codestack.ui.theme.SlateCard
@@ -84,18 +68,17 @@ fun ActionCard(
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    // Note: In original, logic was inside composable. 
-    // Keeping animation logic here for simplicity of the component.
-    
-    androidx.compose.animation.core.animateFloatAsState(
-        targetValue = 1f, // Simplified from original for cleaner separation, or keep state here if strictly needed.
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 150),
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = tween(durationMillis = 150),
         label = "scale"
     )
 
     Card(
         onClick = onClick,
         modifier = modifier
+            .scale(scale)
             .height(140.dp)
             .border(1.dp, iconColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
@@ -153,7 +136,7 @@ fun DrawerContent(
             label = { Text("Terminal") },
             selected = currentRoute?.contains("terminal") == true,
             onClick = {
-                navController.navigate("terminal?isProjectMode=false")
+                navController.navigate(Screen.Terminal.createRoute(false))
                 scope.launch { drawerState.close() }
             },
             icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
@@ -171,7 +154,7 @@ fun DrawerContent(
             label = { Text("Settings") },
             selected = currentRoute == "settings",
             onClick = {
-                navController.navigate("settings")
+                navController.navigate(Screen.Settings.route)
                 scope.launch { drawerState.close() }
             },
             icon = { Icon(Icons.Default.Settings, contentDescription = null) }
