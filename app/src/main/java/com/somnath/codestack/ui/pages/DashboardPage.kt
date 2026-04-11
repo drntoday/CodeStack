@@ -12,10 +12,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.FlightTakeoff
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -35,7 +35,7 @@ fun DashboardPage(navController: NavController) {
             .fillMaxSize()
             .padding(24.dp)
             .background(DeepSlate),
-        horizontalAlignment = androidx.compose.ui.Alignment.Start
+        horizontalAlignment = Alignment.Start
     ) {
         DashboardHeader()
 
