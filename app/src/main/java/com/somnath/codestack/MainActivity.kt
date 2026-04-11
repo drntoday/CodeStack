@@ -47,20 +47,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -75,6 +68,7 @@ import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,30 +79,16 @@ import okhttp3.ResponseBody
 import retrofit2.Retrofit
 import retrofit2.http.*
 import java.io.File
-import java.util.UUID
 
-// STABLE 2026 GOOGLE AI SDK
+// --- DATA MODELS (Moved to top level for Global Access) ---
 
-/**
- * CODESTACK - ARCHITECT WORKFLOW EDITION
- * VERSION: 4.1.0 (PHASE-BASED UI)
- */
-
-// --- Colors & Theme ---
-private val DeepSlate = Color(0xFF0f172a)
-private val ElectricBlue = Color(0xFF3B82F6)
-private val Violet = Color(0xFF8B5CF6)
-private val SlateCard = Color(0xFF64748B)
-private val Emerald = Color(0xFF10b981)
-private val TerminalGreen = Color(0xFF00FF00)
-
-// --- Data Models ---
 data class ChatMessage(val text: String, val isUser: Boolean)
 
+// Ensuring ProjectFile is clearly defined with all necessary properties
 data class ProjectFile(
-    val name: String, 
-    val path: String, 
-    val content: String, 
+    val name: String,
+    val path: String,
+    val content: String,
     var status: FileStatus = FileStatus.Pending
 )
 
@@ -116,15 +96,13 @@ enum class FileStatus { Pending, Syncing, Ready, Error }
 
 data class ArchitectResponse(val files: List<ProjectFile>)
 
-// New Model for Blueprint Phase
 data class ArchitectureBlueprint(
-    val type: String, 
-    val infra: String, 
-    val security: String, 
+    val type: String,
+    val infra: String,
+    val security: String,
     val summary: String
 )
 
-// New Enum for Phase Management
 enum class WorkflowPhase {
     Discussion, // Phase 1: Chat + Chips
     Blueprint,  // Phase 2: HLD/LLD Summary
@@ -133,7 +111,16 @@ enum class WorkflowPhase {
 
 data class WorkflowStep(val id: Int, val title: String)
 
-// --- Helper: ProjectDirectoryManager ---
+
+// --- COLORS & THEME ---
+private val DeepSlate = Color(0xFF0f172a)
+private val ElectricBlue = Color(0xFF3B82F6)
+private val Violet = Color(0xFF8B5CF6)
+private val SlateCard = Color(0xFF64748B)
+private val Emerald = Color(0xFF10b981)
+private val TerminalGreen = Color(0xFF00FF00)
+
+// --- HELPER: ProjectDirectoryManager ---
 object ProjectDirectoryManager {
     fun createProjectRoot(context: Context, projectName: String): File {
         val root = File(context.getExternalFilesDir(null), "CodeStack/$projectName")
@@ -146,14 +133,14 @@ object ProjectDirectoryManager {
         file.parentFile?.mkdirs()
         file.writeText(content)
     }
-    
+
     fun saveArchitectureMd(projectRoot: File, blueprint: ArchitectureBlueprint) {
         val content = """
             # ARCHITECTURE DECISIONS
             **Project HLD Type:** ${blueprint.type}
             **Infrastructure:** ${blueprint.infra}
             **Security Model:** ${blueprint.security}
-            
+
             ## Summary
             ${blueprint.summary}
         """.trimIndent()
@@ -161,7 +148,7 @@ object ProjectDirectoryManager {
     }
 }
 
-// --- GitHub API Interface ---
+// --- GITHUB API INTERFACE ---
 interface GitHubApiService {
     @POST("user/repos")
     suspend fun createRepo(@Body request: JsonObject): ResponseBody
@@ -184,7 +171,7 @@ interface GitHubApiService {
 
 // --- MainViewModel (The Orchestrator) ---
 class MainViewModel(private val context: Context) : ViewModel() {
-    
+
     // --- StateFlows ---
     private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
     val terminalLogs: StateFlow<List<String>> = _terminalLogs.asStateFlow()
@@ -197,8 +184,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
 
     private val _isBuilding = MutableStateFlow(false)
     val isBuilding: StateFlow<Boolean> = _isBuilding.asStateFlow()
-    
-    // Constant List of Steps (Exposed as StateFlow to strictly follow prompt, though static)
+
     private val _workflowSteps = MutableStateFlow(listOf(
         WorkflowStep(0, "Requirements"),
         WorkflowStep(1, "Blueprint"),
@@ -208,7 +194,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
     ))
     val workflowSteps: StateFlow<List<WorkflowStep>> = _workflowSteps.asStateFlow()
 
-    // --- NEW STATE FOR WORKFLOW PHASE ---
+    // --- STATE FOR WORKFLOW PHASE ---
     private val _workflowPhase = MutableStateFlow(WorkflowPhase.Discussion)
     val workflowPhase: StateFlow<WorkflowPhase> = _workflowPhase.asStateFlow()
 
@@ -224,14 +210,14 @@ class MainViewModel(private val context: Context) : ViewModel() {
     private val githubApi = retrofit.create(GitHubApiService::class.java)
     private val gson = Gson()
 
-    // --- Logger (Updated for Categories) ---
+    // --- Logger ---
     fun log(category: String, msg: String) {
         val timestamp = System.currentTimeMillis().toString().takeLast(4)
         val formattedMsg = "[$category] > $msg"
         _terminalLogs.value = _terminalLogs.value + "[$timestamp] $formattedMsg"
     }
 
-    // --- 1. PHASE 1: DISCUSSION (Chips) ---
+    // --- 1. PHASE 1: DISCUSSION ---
     fun triggerArchitectInsight(topic: String) {
         viewModelScope.launch {
             val response = when(topic) {
@@ -250,7 +236,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             _isBuilding.value = true
             log("BLUEPRINT", "Synthesizing architecture decisions...")
-            
+
             try {
                 val model = GenerativeModel(
                     modelName = "gemini-1.5-flash",
@@ -258,23 +244,23 @@ class MainViewModel(private val context: Context) : ViewModel() {
                     systemInstruction = content {
                         text("""
                             You are a Solution Architect.
-                            Based on the requirement: "$userRequirement", determine the HLD Type (Monolith or Microservices), 
+                            Based on the requirement: "$userRequirement", determine the HLD Type (Monolith or Microservices),
                             Infrastructure (AWS/GCP/Azure), and Security Model.
                             Output ONLY a JSON object: { "type": "...", "infra": "...", "security": "...", "summary": "..." }
                         """.trimIndent())
                     }
                 )
-                
+
                 val response = model.generateContent("Generate Blueprint JSON")
                 val cleanJson = response.text?.replace("```json", "")?.replace("```", "")
-                
+
                 val blueprint = gson.fromJson(cleanJson, ArchitectureBlueprint::class.java)
                 _architectureBlueprint.value = blueprint
-                
+
                 log("BLUEPRINT", "HLD: ${blueprint.type} | Infra: ${blueprint.infra}")
-                _workflowStep.value = 1 // Move to Blueprint step
+                _workflowStep.value = 1
                 _workflowPhase.value = WorkflowPhase.Blueprint
-                
+
             } catch (e: Exception) {
                 log("ERROR", "Blueprint generation failed: ${e.message}")
             } finally {
@@ -290,7 +276,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
             _isBuilding.value = true
             _workflowStep.value = 2 // Generation
             _workflowPhase.value = WorkflowPhase.Execution
-            _terminalLogs.value = emptyList() // Clear for execution phase logs
+            _terminalLogs.value = emptyList()
             _manifestFiles.value = emptyList()
 
             try {
@@ -300,16 +286,16 @@ class MainViewModel(private val context: Context) : ViewModel() {
                 // 1. Generate Files
                 log("ARCH", "Project Directory: ${projectRoot.absolutePath}")
                 val files = generateArchitectureFiles("Build a ${_architectureBlueprint.value?.type ?: "Android"} app for ${projectName}")
-                
+
                 // Update Manifest with Syncing status
                 val manifestWithStatus = files.map { it.copy(status = FileStatus.Syncing) }
                 _manifestFiles.value = manifestWithStatus
                 log("GEN", "Generated ${files.size} file blueprints.")
 
-                // Save Locally & Create ARCHITECTURE.md
+                // Save Locally
                 _architectureBlueprint.value?.let { ProjectDirectoryManager.saveArchitectureMd(projectRoot, it) }
                 files.forEach { ProjectDirectoryManager.saveFile(projectRoot, it.path, it.content) }
-                
+
                 // Mark as Ready
                 _manifestFiles.value = _manifestFiles.value.map { it.copy(status = FileStatus.Ready) }
 
@@ -324,7 +310,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
                 dispatchAction()
 
                 log("SUCCESS", "BUILD SEQUENCE COMPLETE.")
-                
+
             } catch (e: Exception) {
                 log("CRITICAL FAILURE", "${e.message}")
             } finally {
@@ -350,6 +336,8 @@ class MainViewModel(private val context: Context) : ViewModel() {
             val response = model.generateContent(prompt)
             val cleanJson = response.text?.replace("```json", "")?.replace("```", "")
             val architectResponse = gson.fromJson(cleanJson, ArchitectResponse::class.java)
+            
+            // Mapping logic robustly handles the ProjectFile creation
             architectResponse.files.map { file ->
                 val name = file.path.substringAfterLast("/")
                 ProjectFile(name, file.path, file.content)
@@ -363,17 +351,17 @@ class MainViewModel(private val context: Context) : ViewModel() {
     private suspend fun syncToGitHub(repoName: String, files: List<ProjectFile>) {
         val token = getGitHubToken(context)
         if (token.isEmpty()) { log("GIT", "Token missing. Skipping sync."); return }
-        
+
         try {
             val createReq = JsonObject().apply { addProperty("name", repoName); addProperty("private", false) }
             val authClient = client.newBuilder().addInterceptor { chain ->
                 chain.proceed(chain.request().newBuilder().addHeader("Authorization", "Bearer $token").build())
             }.build()
             val api = Retrofit.Builder().baseUrl("https://api.github.com/").client(authClient).build().create(GitHubApiService::class.java)
-            
+
             api.createRepo(createReq)
             log("GIT", "Remote repo '$repoName' created.")
-            
+
             files.forEach { file ->
                 val encoded = Base64.encodeToString(file.content.toByteArray(), android.util.Base64.NO_WRAP)
                 val body = JsonObject().apply { addProperty("message", "feat: initial commit"); addProperty("content", encoded) }
@@ -391,12 +379,12 @@ class MainViewModel(private val context: Context) : ViewModel() {
     }
 }
 
-// --- Main Activity ---
+// --- MAIN ACTIVITY ---
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -427,20 +415,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- Persistence Helpers ---
-private fun saveApiKey(context: Context, key: String) = 
+// --- PERSISTENCE HELPERS ---
+private fun saveApiKey(context: Context, key: String) =
     context.getSharedPreferences("cs_prefs", 0).edit().putString("gemini_key", key).apply()
 
-private fun getApiKey(context: Context) = 
+private fun getApiKey(context: Context) =
     context.getSharedPreferences("cs_prefs", 0).getString("gemini_key", "") ?: ""
 
-private fun saveGitHubToken(context: Context, token: String) = 
+private fun saveGitHubToken(context: Context, token: String) =
     context.getSharedPreferences("cs_prefs", 0).edit().putString("github_token", token).apply()
 
-private fun getGitHubToken(context: Context) = 
+private fun getGitHubToken(context: Context) =
     context.getSharedPreferences("cs_prefs", 0).getString("github_token", "") ?: ""
 
-// --- Navigation Graph ---
+// --- NAVIGATION GRAPH ---
 sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
     data object Terminal : Screen("terminal?isProjectMode={isProjectMode}") {
@@ -455,21 +443,21 @@ sealed class Screen(val route: String) {
     }
 }
 
-// --- App Structure & Drawer ---
+// --- APP STRUCTURE & DRAWER ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodeStackApp() {
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    
+
     val navBackStackEntry by navController.currentBackStackEntryFlow.collectAsState(initial = null)
     val currentRoute = navBackStackEntry?.destination?.route
-    
+
     val isDashboard = currentRoute == Screen.Dashboard.route
     val showBottomBar = currentRoute in listOf(
-        Screen.Dashboard.route, 
-        Screen.Terminal.route, 
+        Screen.Dashboard.route,
+        Screen.Terminal.route,
         Screen.Vault.route
     )
 
@@ -492,9 +480,9 @@ fun CodeStackApp() {
                 when {
                     isDashboard -> {
                         TopAppBar(
-                            title = { 
+                            title = {
                                 Text(
-                                    "CODESTACK", 
+                                    "CODESTACK",
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.primary,
@@ -512,7 +500,7 @@ fun CodeStackApp() {
                     currentRoute?.contains("editor") == true -> {
                         val fileName = navBackStackEntry?.arguments?.getString("fileName") ?: "Unknown"
                         TopAppBar(
-                            title = { 
+                            title = {
                                 Column {
                                     Text("EDITOR", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                     Text(fileName, style = MaterialTheme.typography.titleMedium)
@@ -555,7 +543,7 @@ fun CodeStackApp() {
                             selected = isDashboard,
                             onClick = { navController.navigate(Screen.Dashboard.route) { popUpTo(Screen.Dashboard.route) } },
                             label = { Text("DASHBOARD") },
-                            icon = { Icon(Icons.Default.Menu, contentDescription = null) } 
+                            icon = { Icon(Icons.Default.Menu, contentDescription = null) }
                         )
                         NavigationBarItem(
                             selected = currentRoute == Screen.Terminal.route,
@@ -584,14 +572,13 @@ fun CodeStackApp() {
                     composable(
                         route = Screen.Terminal.route,
                         arguments = listOf(
-                            navArgument("isProjectMode") { 
-                                type = NavType.BoolType 
-                                defaultValue = false 
+                            navArgument("isProjectMode") {
+                                type = NavType.BoolType
+                                defaultValue = false
                             }
                         )
                     ) { backStackEntry ->
                         val isProjectMode = backStackEntry.arguments?.getBoolean("isProjectMode") ?: false
-                        // Initialize ViewModel here
                         val context = LocalContext.current
                         val viewModel = remember { MainViewModel(context) }
                         TerminalPage(navController, viewModel, isProjectMode)
@@ -615,7 +602,7 @@ fun CodeStackApp() {
     }
 }
 
-// --- Dashboard Page ---
+// --- DASHBOARD PAGE ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardPage(navController: NavController) {
@@ -632,18 +619,18 @@ fun DashboardPage(navController: NavController) {
             fontWeight = FontWeight.Bold,
             color = Color.White
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             "System Status: Optimal | Ready for Deployment",
             style = MaterialTheme.typography.bodyMedium,
             color = Color.Gray,
             letterSpacing = 0.5.sp
         )
-        
+
         Spacer(modifier = Modifier.height(32.dp))
-        
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -659,7 +646,7 @@ fun DashboardPage(navController: NavController) {
                     onClick = { navController.navigate(Screen.Terminal.createRoute(true)) }
                 )
             }
-            
+
             item {
                 ActionCard(
                     title = "General Query",
@@ -669,7 +656,7 @@ fun DashboardPage(navController: NavController) {
                     onClick = { navController.navigate(Screen.Terminal.createRoute(false)) }
                 )
             }
-            
+
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ActionCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -734,13 +721,13 @@ fun ActionCard(
     }
 }
 
-// --- TERMINAL PAGE (Updated for Architect Workflow) ---
+// --- TERMINAL PAGE (FIXED: Smart Cast & Modifier Casing) ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProjectMode: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    
+
     var apiKey by remember { mutableStateOf(getApiKey(context)) }
     var showApiKeyDialog by remember { mutableStateOf(apiKey.isEmpty()) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
@@ -756,7 +743,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
     val steps by viewModel.workflowSteps.collectAsState()
     val phase by viewModel.workflowPhase.collectAsState()
     val blueprint by viewModel.architectureBlueprint.collectAsState()
-    
+
     val terminalListState = rememberLazyListState()
 
     LaunchedEffect(logs.size) { if(logs.isNotEmpty()) terminalListState.animateScrollToItem(logs.size - 1) }
@@ -803,10 +790,8 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
     Column(modifier = Modifier.fillMaxSize()) {
         // --- SPLIT LOGIC ---
         if (isProjectMode) {
-            // --- TOP: CHAT AREA ---
-            // Weight: 1.0 in Discussion, 0.5 in Blueprint/Execution
             val chatWeight = if (phase == WorkflowPhase.Discussion) 1f else 0.5f
-            
+
             Column(modifier = Modifier.weight(chatWeight)) {
                 LazyColumn(
                     state = listState,
@@ -814,7 +799,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(messages) { ChatBubble(it, onSaveCode = { code -> 
+                    items(messages) { ChatBubble(it, onSaveCode = { code ->
                         MainActivity.saveCodeToFile(context, "Source_${System.currentTimeMillis()}.kt", code)
                     }) }
                 }
@@ -854,12 +839,12 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
 
                 // Input Area
                 Surface(
-                    tonalElevation = 12.dp, 
+                    tonalElevation = 12.dp,
                     color = Color(0xFF1E293B),
                     modifier = Modifier.imePadding()
                 ) {
                     Row(
-                        Modifier.padding(16.dp).fillMaxWidth(), 
+                        Modifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedTextField(
@@ -875,7 +860,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         IconButton(
-                            onClick = { 
+                            onClick = {
                                 if (inputText.isNotBlank()) {
                                     messages.add(ChatMessage(inputText.trim(), true))
                                     val req = inputText
@@ -885,6 +870,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                         scope.launch {
                                             delay(500)
                                             messages.add(ChatMessage("Acknowledged. Ready to define Blueprint.", false))
+                                            // Trigger blueprint generation logic here if desired, or wait for button
                                         }
                                     }
                                 }
@@ -913,7 +899,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                             Text(phase.name, color = MaterialTheme.colorScheme.primary, fontSize = 10.sp)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        
+
                         // Steps Visual
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             steps.forEach { step ->
@@ -929,24 +915,26 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                         }
                         Spacer(Modifier = Modifier.height(12.dp))
 
-                        // --- PHASE 2: BLUEPRINT DETAILS ---
-                        if (phase == WorkflowPhase.Blueprint && blueprint != null) {
+                        // --- PHASE 2: BLUEPRINT DETAILS (FIXED SMART CAST) ---
+                        // Create local variable for smart cast
+                        val currentBlueprint = blueprint
+                        if (phase == WorkflowPhase.Blueprint && currentBlueprint != null) {
                             Card(colors = CardDefaults.cardColors(Color(0xFF1E293B)), modifier = Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp)) {
                                     Text("ARCHITECTURE BLUEPRINT", color = Violet, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     Spacer(Modifier = Modifier.height(8.dp))
-                                    BlueprintRow("HLD Type", blueprint.type)
-                                    BlueprintRow("Infrastructure", blueprint.infra)
-                                    BlueprintRow("Security", blueprint.security)
+                                    BlueprintRow("HLD Type", currentBlueprint.type)
+                                    BlueprintRow("Infrastructure", currentBlueprint.infra)
+                                    BlueprintRow("Security", currentBlueprint.security)
                                     Spacer(Modifier = Modifier.height(4.dp))
-                                    Text(blueprint.summary, color = Color.White, fontSize = 10.sp, lineHeight = 14.sp)
+                                    Text(currentBlueprint.summary, color = Color.White, fontSize = 10.sp, lineHeight = 14.sp)
                                 }
                             }
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier = Modifier.height(12.dp))
                         }
 
                         Text("TERMINAL OUTPUT", color = Color.Gray, fontSize = 12.sp)
-                        Spacer(Modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Box(Modifier.fillMaxSize().weight(1f).background(Color.Black, RoundedCornerShape(8.dp)).padding(8.dp)) {
                             LazyColumn(state = terminalListState, modifier = Modifier.fillMaxSize()) {
                                 items(logs) { log ->
@@ -970,10 +958,11 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                     item { Text("GENERATING FILES...", color = Color.Gray, fontSize = 10.sp) }
                                 }
                             }
+                            // ProjectFile is now globally accessible, so 'file.path' and 'file.content' work here
                             items(manifest) { file ->
                                 Row(Modifier.fillMaxWidth().background(Color(0xFF1E293B), RoundedCornerShape(4.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Code, null, tint = Violet, modifier = Modifier.size(14.dp))
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(file.name, color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
                                         Text(file.path, color = Color.Gray, fontSize = 9.sp, maxLines = 1)
@@ -995,23 +984,23 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
             // --- STANDARD CHAT MODE ---
             Column(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
-                    state = listState, 
+                    state = listState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(messages) { ChatBubble(it, onSaveCode = { code -> 
+                    items(messages) { ChatBubble(it, onSaveCode = { code ->
                         MainActivity.saveCodeToFile(context, "Source_${System.currentTimeMillis()}.kt", code)
                     }) }
                 }
 
                 Surface(
-                    tonalElevation = 12.dp, 
+                    tonalElevation = 12.dp,
                     color = Color(0xFF1E293B),
                     modifier = Modifier.imePadding()
                 ) {
                     Row(
-                        Modifier.padding(16.dp).fillMaxWidth(), 
+                        Modifier.padding(16.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedTextField(
@@ -1036,10 +1025,10 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                 scope.launch {
                                     try {
                                         val model = GenerativeModel(
-                                            modelName = "gemini-3.1-flash-lite-preview", 
+                                            modelName = "gemini-1.5-flash",
                                             apiKey = apiKey,
-                                            systemInstruction = content { 
-                                                text("You are CodeStack AI, a Senior Software Architect.") 
+                                            systemInstruction = content {
+                                                text("You are CodeStack AI, a Senior Software Architect.")
                                             }
                                         )
                                         messages.add(ChatMessage("", false))
@@ -1082,10 +1071,10 @@ fun BlueprintRow(label: String, value: String) {
 fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
     val horizontalAlign = if (msg.isUser) Alignment.End else Alignment.Start
     val bgColor = if (msg.isUser) ElectricBlue else Color(0xFF334155)
-    
+
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = horizontalAlign) {
         Card(
-            shape = RoundedCornerShape(if (msg.isUser) 16.dp else 4.dp), 
+            shape = RoundedCornerShape(if (msg.isUser) 16.dp else 4.dp),
             colors = CardDefaults.cardColors(containerColor = bgColor),
             modifier = Modifier.widthIn(max = 320.dp)
         ) {
@@ -1096,15 +1085,15 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
                     color = if (msg.isUser) Color.White else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier = Modifier.height(4.dp))
                 Text(
-                    text = msg.text, 
+                    text = msg.text,
                     color = Color.White,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
                     fontFamily = if (msg.text.contains("```")) FontFamily.Monospace else FontFamily.Default
                 )
-                
+
                 if (!msg.isUser && msg.text.contains("```")) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
@@ -1121,7 +1110,7 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
                         colors = ButtonDefaults.buttonColors(containerColor = Violet)
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text("SAVE TO VAULT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -1130,12 +1119,12 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
     }
 }
 
-// --- Vault Page ---
+// --- VAULT PAGE ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultPage(navController: NavController) {
     val context = LocalContext.current
-    val files = remember { 
+    val files = remember {
         mutableStateListOf<File>().apply {
             val folder = File(context.getExternalFilesDir(null), "Projects")
             if (!folder.exists()) folder.mkdirs()
@@ -1149,9 +1138,9 @@ fun VaultPage(navController: NavController) {
             Spacer(Modifier.width(8.dp))
             Text("VAULT STATUS: ONLINE", style = MaterialTheme.typography.labelSmall, color = Color.Green)
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         if (files.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("VAULT EMPTY - AWAITING DATA INGESTION", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
@@ -1161,18 +1150,18 @@ fun VaultPage(navController: NavController) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(files) { file ->
                 Card(
-                    modifier = Modifier.fillMaxWidth().clickable { 
-                        navController.navigate(Screen.Editor.createRoute(file.name)) 
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        navController.navigate(Screen.Editor.createRoute(file.name))
                     },
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     ListItem(
                         headlineContent = { Text(file.name, fontWeight = FontWeight.Bold, color = Color.White) },
-                        supportingContent = { 
-                            Text("SIZE: ${file.length() / 1024} KB | TYPE: ${file.extension.uppercase()}", fontSize = 10.sp, color = Color.Gray) 
+                        supportingContent = {
+                            Text("SIZE: ${file.length() / 1024} KB | TYPE: ${file.extension.uppercase()}", fontSize = 10.sp, color = Color.Gray)
                         },
-                        leadingContent = { 
+                        leadingContent = {
                             Icon(
                                 imageVector = if (file.extension == "kt") Icons.Default.Code else Icons.Default.Description,
                                 contentDescription = null,
@@ -1180,7 +1169,7 @@ fun VaultPage(navController: NavController) {
                             )
                         },
                         trailingContent = {
-                            IconButton(onClick = { 
+                            IconButton(onClick = {
                                 file.delete()
                                 files.remove(file)
                                 Toast.makeText(context, "ASSET PURGED", Toast.LENGTH_SHORT).show()
@@ -1196,7 +1185,7 @@ fun VaultPage(navController: NavController) {
     }
 }
 
-// --- Editor Page ---
+// --- EDITOR PAGE ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorPage(navController: NavController, fileName: String) {
@@ -1240,9 +1229,9 @@ fun EditorPage(navController: NavController, fileName: String) {
                 )
             )
         }
-        
+
         Surface(
-            tonalElevation = 16.dp, 
+            tonalElevation = 16.dp,
             color = Color(0xFF1E293B),
             modifier = Modifier.navigationBarsPadding()
         ) {
@@ -1266,7 +1255,7 @@ fun EditorPage(navController: NavController, fileName: String) {
     }
 }
 
-// --- Settings Page ---
+// --- SETTINGS PAGE ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPage(navController: NavController) {
@@ -1373,7 +1362,7 @@ fun SettingsPage(navController: NavController) {
     }
 }
 
-// --- Drawer Content ---
+// --- DRAWER CONTENT ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
@@ -1381,7 +1370,7 @@ fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
         modifier = Modifier
             .fillMaxHeight()
             .width(280.dp)
-            .background(Color(0xFF0B1120)) 
+            .background(Color(0xFF0B1120))
             .padding(16.dp)
     ) {
         Text(
@@ -1391,20 +1380,20 @@ fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(vertical = 24.dp)
         )
-        
+
         Divider(color = Color.Gray.copy(alpha = 0.2f))
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         DrawerItem(icon = Icons.Default.Menu, label = "Dashboard", route = Screen.Dashboard.route, onNavigate, onClose)
         DrawerItem(icon = Icons.Default.Chat, label = "AI Terminal", route = Screen.Terminal.createRoute(false), onNavigate, onClose)
         DrawerItem(icon = Icons.Default.Code, label = "Vault", route = Screen.Vault.route, onNavigate, onClose)
         DrawerItem(icon = Icons.Outlined.Settings, label = "Configuration", route = Screen.Settings.route, onNavigate, onClose)
-        
+
         Spacer(modifier = Modifier.weight(1f))
-        
+
         Divider(color = Color.Gray.copy(alpha = 0.2f))
-        
+
         DrawerItem(icon = Icons.AutoMirrored.Filled.ExitToApp, label = "Exit App", route = "", onNavigate = {}, onClose)
     }
 }
