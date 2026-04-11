@@ -26,11 +26,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.somnath.codestack.ui.components.getApiKey
-import com.somnath.codestack.ui.components.getGitHubToken
-import com.somnath.codestack.ui.components.saveApiKey
-import com.somnath.codestack.ui.components.saveGitHubToken
 import com.somnath.codestack.ui.theme.DeepSlate
+import com.somnath.codestack.util.getApiKey
+import com.somnath.codestack.util.getGitHubToken
+import com.somnath.codestack.util.saveApiKey
+import com.somnath.codestack.util.saveGitHubToken
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
