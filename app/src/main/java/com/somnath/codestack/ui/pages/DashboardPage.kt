@@ -1,19 +1,23 @@
 package com.somnath.codestack.ui.pages
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,10 +27,7 @@ import androidx.navigation.NavController
 import com.somnath.codestack.Screen
 import com.somnath.codestack.ui.components.ActionCard
 import com.somnath.codestack.ui.components.DashboardHeader
-import com.somnath.codestack.ui.theme.DeepSlate
-import com.somnath.codestack.ui.theme.ElectricBlue
-import com.somnath.codestack.ui.theme.SlateCard
-import com.somnath.codestack.ui.theme.Violet
+import com.somnath.codestack.ui.theme.*
 
 @Composable
 fun DashboardPage(navController: NavController) {
