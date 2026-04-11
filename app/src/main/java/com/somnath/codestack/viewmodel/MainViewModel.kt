@@ -14,6 +14,8 @@ import com.somnath.codestack.model.FileStatus
 import com.somnath.codestack.model.ProjectFile
 import com.somnath.codestack.model.WorkflowPhase
 import com.somnath.codestack.model.WorkflowStep
+import com.somnath.codestack.util.getApiKey
+import com.somnath.codestack.util.getGitHubToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,7 +79,6 @@ interface GitHubApiService {
     ): ResponseBody
 }
 
-// --- MainViewModel (The Orchestrator) ---
 class MainViewModel(private val context: Context) : ViewModel() {
 
     private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
