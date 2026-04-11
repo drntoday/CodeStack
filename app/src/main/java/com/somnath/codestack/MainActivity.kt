@@ -10,8 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
@@ -62,7 +62,6 @@ import com.somnath.codestack.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 
-// --- NAVIGATION GRAPH ---
 sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
     data object Terminal : Screen("terminal?isProjectMode={isProjectMode}") {
@@ -77,7 +76,7 @@ sealed class Screen(val route: String) {
     }
 }
 
-// --- MAIN ACTIVITY ---
+@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,7 +104,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- APP STRUCTURE & DRAWER ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodeStackApp() {
     val navController = rememberNavController()
@@ -259,7 +258,6 @@ fun CodeStackApp() {
     }
 }
 
-// --- Placeholder Pages ---
 @Composable
 fun VaultPage(navController: NavController) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
