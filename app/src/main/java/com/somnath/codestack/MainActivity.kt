@@ -90,8 +90,8 @@ import java.util.UUID
 // STABLE 2026 GOOGLE AI SDK
 
 /**
- * CODESTACK - FULLY CORRECTED VERSION
- * VERSION: 3.1.0 (StateFlow + Type Safety)
+ * CODESTACK - ARCHITECT WORKFLOW EDITION
+ * VERSION: 4.1.0 (PHASE-BASED UI)
  */
 
 // --- Colors & Theme ---
@@ -104,10 +104,62 @@ private val TerminalGreen = Color(0xFF00FF00)
 
 // --- Data Models ---
 data class ChatMessage(val text: String, val isUser: Boolean)
-// Explicitly defined with name, path, and content
-data class ProjectFile(val name: String, val path: String, val content: String)
+
+data class ProjectFile(
+    val name: String, 
+    val path: String, 
+    val content: String, 
+    var status: FileStatus = FileStatus.Pending
+)
+
+enum class FileStatus { Pending, Syncing, Ready, Error }
+
 data class ArchitectResponse(val files: List<ProjectFile>)
+
+// New Model for Blueprint Phase
+data class ArchitectureBlueprint(
+    val type: String, 
+    val infra: String, 
+    val security: String, 
+    val summary: String
+)
+
+// New Enum for Phase Management
+enum class WorkflowPhase {
+    Discussion, // Phase 1: Chat + Chips
+    Blueprint,  // Phase 2: HLD/LLD Summary
+    Execution   // Phase 3: Real Build
+}
+
 data class WorkflowStep(val id: Int, val title: String)
+
+// --- Helper: ProjectDirectoryManager ---
+object ProjectDirectoryManager {
+    fun createProjectRoot(context: Context, projectName: String): File {
+        val root = File(context.getExternalFilesDir(null), "CodeStack/$projectName")
+        if (!root.exists()) root.mkdirs()
+        return root
+    }
+
+    fun saveFile(projectRoot: File, relativePath: String, content: String) {
+        val file = File(projectRoot, relativePath)
+        file.parentFile?.mkdirs()
+        file.writeText(content)
+    }
+    
+    fun saveArchitectureMd(projectRoot: File, blueprint: ArchitectureBlueprint) {
+        val content = """
+            # ARCHITECTURE DECISIONS
+            **Project HLD Type:** ${blueprint.type}
+            **Infrastructure:** ${blueprint.infra}
+            **Security Model:** ${blueprint.security}
+            
+            ## Summary
+            ${blueprint.summary}
+        """.trimIndent()
+        saveFile(projectRoot, "ARCHITECTURE.md", content)
+    }
+}
 
 // --- GitHub API Interface ---
 interface GitHubApiService {
@@ -149,11 +201,19 @@ class MainViewModel(private val context: Context) : ViewModel() {
     // Constant List of Steps (Exposed as StateFlow to strictly follow prompt, though static)
     private val _workflowSteps = MutableStateFlow(listOf(
         WorkflowStep(0, "Requirements"),
-        WorkflowStep(1, "Code Gen"),
-        WorkflowStep(2, "GitHub Sync"),
-        WorkflowStep(3, "Local Deploy")
+        WorkflowStep(1, "Blueprint"),
+        WorkflowStep(2, "Generation"),
+        WorkflowStep(3, "Sync"),
+        WorkflowStep(4, "CI/CD")
     ))
     val workflowSteps: StateFlow<List<WorkflowStep>> = _workflowSteps.asStateFlow()
+
+    // --- NEW STATE FOR WORKFLOW PHASE ---
+    private val _workflowPhase = MutableStateFlow(WorkflowPhase.Discussion)
+    val workflowPhase: StateFlow<WorkflowPhase> = _workflowPhase.asStateFlow()
+
+    private val _architectureBlueprint = MutableStateFlow<ArchitectureBlueprint?>(null)
+    val architectureBlueprint: StateFlow<ArchitectureBlueprint?> = _architectureBlueprint.asStateFlow()
 
     // --- Networking Setup ---
     private val client = OkHttpClient.Builder().build()
@@ -164,174 +224,170 @@ class MainViewModel(private val context: Context) : ViewModel() {
     private val githubApi = retrofit.create(GitHubApiService::class.java)
     private val gson = Gson()
 
-    // --- Logger ---
-    fun log(msg: String) {
+    // --- Logger (Updated for Categories) ---
+    fun log(category: String, msg: String) {
         val timestamp = System.currentTimeMillis().toString().takeLast(4)
-        _terminalLogs.value = _terminalLogs.value + "[$timestamp] $msg"
+        val formattedMsg = "[$category] > $msg"
+        _terminalLogs.value = _terminalLogs.value + "[$timestamp] $formattedMsg"
     }
 
-    // --- 1. ORCHESTRATOR ---
-    fun startAutonomousBuild(userRequirement: String) {
+    // --- 1. PHASE 1: DISCUSSION (Chips) ---
+    fun triggerArchitectInsight(topic: String) {
+        viewModelScope.launch {
+            val response = when(topic) {
+                "Propose Microservices" -> "Considering a modular approach: Auth, User, and Content services to decouple scaling needs."
+                "Apply Zero-Trust Security" -> "Implementing mTLS between services and JWT with short-lived tokens."
+                "Setup CI/CD Pipeline" -> "Utilizing GitHub Actions for build, test, and deployment to cluster."
+                else -> "Analyzing $topic implications..."
+            }
+            log("AI_INSIGHT", response)
+        }
+    }
+
+    // --- 2. PHASE 2: FINALIZATION (Blueprint) ---
+    fun generateBlueprint(userRequirement: String) {
         if (_isBuilding.value) return
         viewModelScope.launch {
             _isBuilding.value = true
-            _terminalLogs.value = emptyList()
-            _manifestFiles.value = emptyList()
+            log("BLUEPRINT", "Synthesizing architecture decisions...")
             
             try {
-                // STEP 1: PLANNING (Gemini)
-                _workflowStep.value = 1
-                log("INITIATING PROJECT PLANNING...")
-                log("REQUIREMENT: $userRequirement")
+                val model = GenerativeModel(
+                    modelName = "gemini-1.5-flash",
+                    apiKey = getApiKey(context),
+                    systemInstruction = content {
+                        text("""
+                            You are a Solution Architect.
+                            Based on the requirement: "$userRequirement", determine the HLD Type (Monolith or Microservices), 
+                            Infrastructure (AWS/GCP/Azure), and Security Model.
+                            Output ONLY a JSON object: { "type": "...", "infra": "...", "security": "...", "summary": "..." }
+                        """.trimIndent())
+                    }
+                )
                 
-                val files = generateArchitecture(userRequirement)
+                val response = model.generateContent("Generate Blueprint JSON")
+                val cleanJson = response.text?.replace("```json", "")?.replace("```", "")
                 
-                if (files.isEmpty()) {
-                    log("ERROR: FAILED TO GENERATE ARCHITECTURE.")
-                    _isBuilding.value = false
-                    _workflowStep.value = 0
-                    return@launch
-                }
+                val blueprint = gson.fromJson(cleanJson, ArchitectureBlueprint::class.java)
+                _architectureBlueprint.value = blueprint
                 
-                _manifestFiles.value = files
-                log("MANIFEST GENERATED: ${files.size} FILES FOUND.")
-                
-                // STEP 2: GENERATION
-                _workflowStep.value = 2
-                log("CODE GENERATION COMPLETE. PREPARING SYNC...")
-                
-                // STEP 3: GITHUB SYNC
-                _workflowStep.value = 3
-                syncToGitHub(files)
-                
-                // STEP 4: TESTING/DEPLOY
-                _workflowStep.value = 4
-                log("TRIGGERING CI/CD PIPELINE...")
-                dispatchAction()
-                
-                log("BUILD SEQUENCE COMPLETE.")
-                _workflowStep.value = 5 // Done
+                log("BLUEPRINT", "HLD: ${blueprint.type} | Infra: ${blueprint.infra}")
+                _workflowStep.value = 1 // Move to Blueprint step
+                _workflowPhase.value = WorkflowPhase.Blueprint
                 
             } catch (e: Exception) {
-                log("CRITICAL FAILURE: ${e.message}")
-                e.printStackTrace()
+                log("ERROR", "Blueprint generation failed: ${e.message}")
             } finally {
                 _isBuilding.value = false
             }
         }
     }
 
-    // --- 2. THE ARCHITECT (Gemini) ---
-    private suspend fun generateArchitecture(prompt: String): List<ProjectFile> {
-        val apiKey = getApiKey(context)
-        if (apiKey.isEmpty()) {
-            log("ERROR: GEMINI API KEY MISSING.")
-            return emptyList()
-        }
+    // --- 3. PHASE 3: ORCHESTRATOR ---
+    fun startAutonomousBuild(projectName: String) {
+        if (_isBuilding.value) return
+        viewModelScope.launch {
+            _isBuilding.value = true
+            _workflowStep.value = 2 // Generation
+            _workflowPhase.value = WorkflowPhase.Execution
+            _terminalLogs.value = emptyList() // Clear for execution phase logs
+            _manifestFiles.value = emptyList()
 
+            try {
+                val projectRoot = ProjectDirectoryManager.createProjectRoot(context, projectName)
+                log("AUTH", "Authenticating with Gemini & GitHub APIs...")
+
+                // 1. Generate Files
+                log("ARCH", "Project Directory: ${projectRoot.absolutePath}")
+                val files = generateArchitectureFiles("Build a ${_architectureBlueprint.value?.type ?: "Android"} app for ${projectName}")
+                
+                // Update Manifest with Syncing status
+                val manifestWithStatus = files.map { it.copy(status = FileStatus.Syncing) }
+                _manifestFiles.value = manifestWithStatus
+                log("GEN", "Generated ${files.size} file blueprints.")
+
+                // Save Locally & Create ARCHITECTURE.md
+                _architectureBlueprint.value?.let { ProjectDirectoryManager.saveArchitectureMd(projectRoot, it) }
+                files.forEach { ProjectDirectoryManager.saveFile(projectRoot, it.path, it.content) }
+                
+                // Mark as Ready
+                _manifestFiles.value = _manifestFiles.value.map { it.copy(status = FileStatus.Ready) }
+
+                // 2. Sync
+                _workflowStep.value = 3
+                log("GIT", "Initializing repo and pushing CI/CD workflow...")
+                syncToGitHub(projectName, files)
+
+                // 3. Deploy
+                _workflowStep.value = 4
+                log("DEPLOY", "Triggering GitHub Actions for testing...")
+                dispatchAction()
+
+                log("SUCCESS", "BUILD SEQUENCE COMPLETE.")
+                
+            } catch (e: Exception) {
+                log("CRITICAL FAILURE", "${e.message}")
+            } finally {
+                _isBuilding.value = false
+            }
+        }
+    }
+
+    private suspend fun generateArchitectureFiles(prompt: String): List<ProjectFile> {
+        val apiKey = getApiKey(context)
         return try {
             val model = GenerativeModel(
                 modelName = "gemini-1.5-flash",
                 apiKey = apiKey,
                 systemInstruction = content {
                     text("""
-                        You are an expert Android Architect. 
                         Output a JSON object with a key 'files' containing an array of objects.
-                        Each object must have 'path' (e.g., app/src/main/AndroidManifest.xml) and 'content' (the full file code).
-                        Do not include markdown backticks. Just raw JSON.
+                        Each object: { 'path': '...', 'content': '...' }
                         Project: $prompt
                     """.trimIndent())
                 }
             )
-            
-            log("CONTACTING GEMINI AI CORE...")
             val response = model.generateContent(prompt)
-            val jsonText = response.text?.trim()
-            
-            // Basic cleanup in case of markdown code blocks
-            val cleanJson = jsonText?.replace("```json", "")?.replace("```", "")
-            
-            log("PARSING STRUCTURED DATA...")
+            val cleanJson = response.text?.replace("```json", "")?.replace("```", "")
             val architectResponse = gson.fromJson(cleanJson, ArchitectResponse::class.java)
-            
-            // Map to ProjectFile including 'name' extraction
             architectResponse.files.map { file ->
                 val name = file.path.substringAfterLast("/")
                 ProjectFile(name, file.path, file.content)
             }
-            
         } catch (e: Exception) {
-            log("GEMINI PARSING ERROR: ${e.message}")
+            log("GEN_ERROR", e.message ?: "Unknown Error")
             emptyList()
         }
     }
 
-    // --- 3. THE ACTION (GitHub) ---
-    private suspend fun syncToGitHub(files: List<ProjectFile>) {
+    private suspend fun syncToGitHub(repoName: String, files: List<ProjectFile>) {
         val token = getGitHubToken(context)
-        if (token.isEmpty()) {
-            log("WARNING: GITHUB TOKEN MISSING. SKIPPING SYNC.")
-            return
-        }
-
-        val repoName = "codestack-${UUID.randomUUID().toString().substring(0..5)}"
-        val owner = "user" // In real app, fetch /user endpoint to get login
+        if (token.isEmpty()) { log("GIT", "Token missing. Skipping sync."); return }
         
-        // 3a. Create Repo
-        log("CREATING REMOTE REPOSITORY: $repoName...")
         try {
-            val createReq = JsonObject().apply {
-                addProperty("name", repoName)
-                addProperty("private", false)
-                addProperty("auto_init", false)
-            }
+            val createReq = JsonObject().apply { addProperty("name", repoName); addProperty("private", false) }
+            val authClient = client.newBuilder().addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().addHeader("Authorization", "Bearer $token").build())
+            }.build()
+            val api = Retrofit.Builder().baseUrl("https://api.github.com/").client(authClient).build().create(GitHubApiService::class.java)
             
-            val authClient = client.newBuilder()
-                .addInterceptor { chain ->
-                    val newRequest = chain.request().newBuilder()
-                        .addHeader("Authorization", "Bearer $token")
-                        .addHeader("Accept", "application/vnd.github+json")
-                        .build()
-                    chain.proceed(newRequest)
-                }.build()
+            api.createRepo(createReq)
+            log("GIT", "Remote repo '$repoName' created.")
             
-            val apiWithAuth = Retrofit.Builder()
-                .baseUrl("https://api.github.com/")
-                .client(authClient)
-                .build()
-                .create(GitHubApiService::class.java)
-
-            apiWithAuth.createRepo(createReq)
-            log("REPOSITORY CREATED SUCCESSFULLY.")
-
-            // 3b. Push Files
-            log("UPLOADING ASSETS...")
             files.forEach { file ->
-                try {
-                    val encodedContent = Base64.encodeToString(file.content.toByteArray(), android.util.Base64.NO_WRAP)
-                    val fileReq = JsonObject().apply {
-                        addProperty("message", "Initial commit via CodeStack")
-                        addProperty("content", encodedContent)
-                    }
-                    
-                    apiWithAuth.createFile(owner, repoName, file.path, fileReq)
-                    log("UPLOADED: ${file.path}")
-                } catch (e: Exception) {
-                    log("FAILED TO UPLOAD ${file.path}: ${e.message}")
-                }
+                val encoded = Base64.encodeToString(file.content.toByteArray(), android.util.Base64.NO_WRAP)
+                val body = JsonObject().apply { addProperty("message", "feat: initial commit"); addProperty("content", encoded) }
+                api.createFile("user", repoName, file.path, body)
             }
-            log("SYNC COMPLETE.")
-            
+            log("GIT", "Assets pushed successfully.")
         } catch (e: Exception) {
-            log("GITHUB SYNC FAILED: ${e.message}")
+            log("GIT_ERROR", e.message ?: "Unknown Error")
         }
     }
 
     private suspend fun dispatchAction() {
-        // Simulated dispatch
-        log("DISPATCHING WORKFLOW EVENT...")
         delay(500)
-        log("WORKFLOW TRIGGERED SUCCESSFULLY.")
+        log("DEPLOY", "Workflow dispatched successfully.")
     }
 }
 
@@ -678,7 +734,7 @@ fun ActionCard(
     }
 }
 
-// --- TERMINAL PAGE (Corrected) ---
+// --- TERMINAL PAGE (Updated for Architect Workflow) ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProjectMode: Boolean) {
@@ -692,19 +748,18 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Collect State from ViewModel
+    // Collect State
     val logs by viewModel.terminalLogs.collectAsState()
     val manifest by viewModel.manifestFiles.collectAsState()
     val currentStep by viewModel.workflowStep.collectAsState()
     val building by viewModel.isBuilding.collectAsState()
-    val steps by viewModel.workflowSteps.collectAsState() // List of WorkflowStep objects
+    val steps by viewModel.workflowSteps.collectAsState()
+    val phase by viewModel.workflowPhase.collectAsState()
+    val blueprint by viewModel.architectureBlueprint.collectAsState()
     
     val terminalListState = rememberLazyListState()
 
-    // Auto-scroll terminal
-    LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) terminalListState.animateScrollToItem(logs.size - 1)
-    }
+    LaunchedEffect(logs.size) { if(logs.isNotEmpty()) terminalListState.animateScrollToItem(logs.size - 1) }
 
     // Init Welcome
     LaunchedEffect(Unit) {
@@ -718,10 +773,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
         }
     }
 
-    // Chat Scroll
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
-    }
+    LaunchedEffect(messages.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1) }
 
     if (showApiKeyDialog) {
         var tempKey by remember { mutableStateOf("") }
@@ -748,12 +800,14 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
         )
     }
 
-    // Main Layout Column
     Column(modifier = Modifier.fillMaxSize()) {
-        // Split Logic
+        // --- SPLIT LOGIC ---
         if (isProjectMode) {
-            // --- TOP: CHAT (Weight 1) ---
-            Column(modifier = Modifier.weight(1f)) {
+            // --- TOP: CHAT AREA ---
+            // Weight: 1.0 in Discussion, 0.5 in Blueprint/Execution
+            val chatWeight = if (phase == WorkflowPhase.Discussion) 1f else 0.5f
+            
+            Column(modifier = Modifier.weight(chatWeight)) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -765,36 +819,39 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                     }) }
                 }
 
-                // Build Button Area (Visible in Project Mode)
-                if (!building && currentStep == 0 && messages.isNotEmpty()) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        color = Color.Transparent
-                    ) {
+                // --- PHASE 1: CHIPS ---
+                if (phase == WorkflowPhase.Discussion) {
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        Text("Architect Insights", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
+                            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Propose Microservices") }, label = { Text("Microservices", fontSize = 11.sp) })
+                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Apply Zero-Trust Security") }, label = { Text("Zero-Trust", fontSize = 11.sp) })
+                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Setup CI/CD Pipeline") }, label = { Text("CI/CD", fontSize = 11.sp) })
+                        }
+                    }
+                }
+
+                // --- PHASE 2: BLUEPRINT BUTTON ---
+                if (phase == WorkflowPhase.Blueprint) {
+                    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), color = Color.Transparent) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                             Button(
-                                onClick = { 
-                                    // Trigger Real Build via ViewModel
-                                    viewModel.startAutonomousBuild(messages.last().text)
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Emerald,
-                                    contentColor = Color.Black
-                                ),
+                                onClick = { viewModel.startAutonomousBuild("Project_${System.currentTimeMillis()}") },
+                                colors = ButtonDefaults.buttonColors(containerColor = Emerald, contentColor = Color.Black),
                                 shape = RoundedCornerShape(24.dp)
                             ) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("FINALIZE & BUILD", fontWeight = FontWeight.Bold)
+                                Text("EXECUTE BUILD", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                
+
                 // Input Area
                 Surface(
                     tonalElevation = 12.dp, 
@@ -809,8 +866,8 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                             value = inputText,
                             onValueChange = { inputText = it },
                             modifier = Modifier.weight(1f),
-                            placeholder = { Text("Define project requirements...") },
-                            enabled = !isGenerating && !building,
+                            placeholder = { Text("Describe project...") },
+                            enabled = !building && phase == WorkflowPhase.Discussion,
                             shape = RoundedCornerShape(12.dp),
                             colors = TextFieldDefaults.outlinedTextFieldColors(
                                 focusedBorderColor = MaterialTheme.colorScheme.primary
@@ -821,30 +878,18 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                             onClick = { 
                                 if (inputText.isNotBlank()) {
                                     messages.add(ChatMessage(inputText.trim(), true))
+                                    val req = inputText
                                     inputText = ""
-                                    isGenerating = true
-                                    scope.launch {
-                                        try {
-                                            val model = GenerativeModel(
-                                                modelName = "gemini-3.1-flash-lite-preview", 
-                                                apiKey = apiKey,
-                                                systemInstruction = content { 
-                                                    text("You are a Product Manager gathering requirements. Be concise.") 
-                                                }
-                                            )
-                                            model.generateContentStream(messages.last().text).collect { chunk ->
-                                                // Simplified response
-                                            }
-                                            messages.add(ChatMessage("REQUIREMENTS ACKNOWLEDGED. READY TO BUILD.", false))
-                                        } catch (e: Exception) {
-                                            messages.add(ChatMessage("ERROR: ${e.message}", false))
-                                        } finally {
-                                            isGenerating = false
+                                    // Logic
+                                    if (phase == WorkflowPhase.Discussion) {
+                                        scope.launch {
+                                            delay(500)
+                                            messages.add(ChatMessage("Acknowledged. Ready to define Blueprint.", false))
                                         }
                                     }
                                 }
                             },
-                            enabled = !isGenerating && !building,
+                            enabled = !building && phase == WorkflowPhase.Discussion,
                             colors = IconButtonDefaults.iconButtonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = Color.Black
@@ -858,112 +903,88 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
 
             HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
 
-            // --- BOTTOM: PROJECT PANEL (Weight 1) ---
-            Row(modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFF0B1120))) {
-                // Left: Workflow & Logs
-                Column(modifier = Modifier.weight(1f).padding(12.dp)) {
-                    Text("WORKFLOW STATUS", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Workflow Steps - Explicit comparison
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        steps.forEach { step ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(12.dp)
-                                        .background(
-                                            if (step.id <= currentStep) Emerald else Color.Gray,
-                                            CircleShape
-                                        )
-                                        .then(if (step.id <= currentStep) {
-                                            Modifier.drawBehind {
-                                                drawRoundRect(
-                                                    color = Emerald,
-                                                    alpha = 0.5f,
-                                                    cornerRadius = CornerRadius(20f),
-                                                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f)
-                                                )
-                                            }
-                                        } else Modifier)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    step.title, 
-                                    color = if (step.id <= currentStep) Color.White else Color.Gray,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (step.id <= currentStep) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
+            // --- BOTTOM: PROJECT PANEL (Visible in Phase 2 & 3) ---
+            if (phase != WorkflowPhase.Discussion) {
+                Row(modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFF0B1120)).padding(12.dp)) {
+                    // Left: Workflow & Terminal
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("WORKFLOW", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(phase.name, color = MaterialTheme.colorScheme.primary, fontSize = 10.sp)
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("TERMINAL OUTPUT", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Live Terminal
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black, RoundedCornerShape(8.dp))
-                            .border(1.dp, Color.DarkGray, RoundedCornerShape(8.dp))
-                            .padding(8.dp)
-                    ) {
-                        LazyColumn(
-                            state = terminalListState,
-                            modifier = Modifier.fillMaxSize(),
-                            reverseLayout = false
-                        ) {
-                            items(logs) { log ->
-                                Text(
-                                    text = log,
-                                    color = TerminalGreen,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(bottom = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                VerticalDivider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.fillMaxHeight())
-
-                // Right: File Manifest
-                Column(modifier = Modifier.weight(0.5f).padding(12.dp)) {
-                    Text("FILE MANIFEST", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        if (manifest.isEmpty()) {
-                            item {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("WAITING FOR GENERATION...", color = Color.Gray, fontSize = 10.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Steps Visual
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            steps.forEach { step ->
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(
+                                        modifier = Modifier.size(20.dp).background(if (step.id <= currentStep) Emerald else Color(0xFF1E293B), CircleShape).border(1.dp, Color.Gray, CircleShape)
+                                    ) {
+                                        if (step.id < currentStep) Icon(Icons.Default.CheckCircle, null, tint = Color.Black, modifier = Modifier.padding(2.dp))
+                                    }
+                                    Text(step.title, color = Color.Gray, fontSize = 8.sp)
                                 }
                             }
                         }
-                        items(manifest) { file ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFF1E293B), RoundedCornerShape(4.dp))
-                                    .padding(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Code, 
-                                    contentDescription = null, 
-                                    tint = Violet, 
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(file.name, color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                                    Text(file.path, color = Color.Gray, fontSize = 9.sp)
+                        Spacer(Modifier = Modifier.height(12.dp))
+
+                        // --- PHASE 2: BLUEPRINT DETAILS ---
+                        if (phase == WorkflowPhase.Blueprint && blueprint != null) {
+                            Card(colors = CardDefaults.cardColors(Color(0xFF1E293B)), modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text("ARCHITECTURE BLUEPRINT", color = Violet, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier = Modifier.height(8.dp))
+                                    BlueprintRow("HLD Type", blueprint.type)
+                                    BlueprintRow("Infrastructure", blueprint.infra)
+                                    BlueprintRow("Security", blueprint.security)
+                                    Spacer(Modifier = Modifier.height(4.dp))
+                                    Text(blueprint.summary, color = Color.White, fontSize = 10.sp, lineHeight = 14.sp)
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+
+                        Text("TERMINAL OUTPUT", color = Color.Gray, fontSize = 12.sp)
+                        Spacer(Modifier = Modifier.height(4.dp))
+                        Box(Modifier.fillMaxSize().weight(1f).background(Color.Black, RoundedCornerShape(8.dp)).padding(8.dp)) {
+                            LazyColumn(state = terminalListState, modifier = Modifier.fillMaxSize()) {
+                                items(logs) { log ->
+                                    Text(text = log, color = TerminalGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    VerticalDivider(Modifier.fillMaxHeight(), color = Color.Gray.copy(alpha = 0.3f))
+
+                    // Right: File Manifest
+                    Column(modifier = Modifier.weight(0.6f).padding(start = 12.dp)) {
+                        Text("FILE MANIFEST", color = Color.Gray, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
+                            if (manifest.isEmpty()) {
+                                if (phase == WorkflowPhase.Discussion) {
+                                    item { Text("WAITING FOR BLUEPRINT...", color = Color.Gray, fontSize = 10.sp) }
+                                } else {
+                                    item { Text("GENERATING FILES...", color = Color.Gray, fontSize = 10.sp) }
+                                }
+                            }
+                            items(manifest) { file ->
+                                Row(Modifier.fillMaxWidth().background(Color(0xFF1E293B), RoundedCornerShape(4.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Code, null, tint = Violet, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(file.name, color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
+                                        Text(file.path, color = Color.Gray, fontSize = 9.sp, maxLines = 1)
+                                    }
+                                    // Status Icon
+                                    when(file.status) {
+                                        FileStatus.Syncing -> CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                                        FileStatus.Ready -> Icon(Icons.Default.CheckCircle, null, tint = Emerald, modifier = Modifier.size(16.dp))
+                                        FileStatus.Error -> Icon(Icons.Default.ArrowBack, null, tint = Color.Red, modifier = Modifier.size(16.dp)) // Placeholder for error
+                                        else -> Box {}
+                                    }
                                 }
                             }
                         }
@@ -971,7 +992,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                 }
             }
         } else {
-            // --- STANDARD CHAT MODE (Full Height) ---
+            // --- STANDARD CHAT MODE ---
             Column(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState, 
@@ -1046,6 +1067,14 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                 }
             }
         }
+    }
+}
+
+@Composable
+fun BlueprintRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.Gray, fontSize = 10.sp)
+        Text(value, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1283,7 +1312,7 @@ fun SettingsPage(navController: NavController) {
                             enabled = !isTestingGemini,
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.primary)
                         ) { Text(if (isTestingGemini) "Pinging..." else "Test", fontSize = 12.sp) }
-                        }
+                    }
                 )
             }
 
@@ -1314,7 +1343,7 @@ fun SettingsPage(navController: NavController) {
                             enabled = !isTestingGithub,
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.secondary)
                         ) { Text(if (isTestingGithub) "Pinging..." else "Test", fontSize = 12.sp) }
-                        }
+                    }
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Note: Token requires 'repo' and 'workflow' scopes.", style = MaterialTheme.typography.bodySmall, color = Color.Gray.copy(alpha = 0.7f), fontSize = 11.sp)
