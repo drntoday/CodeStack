@@ -12,8 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
-// --- SETTINGS COMPONENTS ---
-
 @Composable
 fun ApiKeyDialog(
     onDismiss: () -> Unit,
