@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
@@ -87,18 +88,10 @@ import retrofit2.http.*
 import java.io.File
 import java.util.UUID
 
-// STABLE 2026 GOOGLE AI SDK
-
-/**
- * CODESTACK - ARCHITECT WORKFLOW EDITION
- * VERSION: 4.1.0 (PHASE-BASED UI)
- */
-
-// --- DATA MODELS (Moved to top level for Global Access) ---
+// --- DATA MODELS ---
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
-// Ensuring ProjectFile is clearly defined with all necessary properties
 data class ProjectFile(
     val name: String,
     val path: String,
@@ -185,7 +178,6 @@ interface GitHubApiService {
 // --- MainViewModel (The Orchestrator) ---
 class MainViewModel(private val context: Context) : ViewModel() {
 
-    // --- StateFlows ---
     private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
     val terminalLogs: StateFlow<List<String>> = _terminalLogs.asStateFlow()
 
@@ -207,14 +199,12 @@ class MainViewModel(private val context: Context) : ViewModel() {
     ))
     val workflowSteps: StateFlow<List<WorkflowStep>> = _workflowSteps.asStateFlow()
 
-    // --- STATE FOR WORKFLOW PHASE ---
     private val _workflowPhase = MutableStateFlow(WorkflowPhase.Discussion)
     val workflowPhase: StateFlow<WorkflowPhase> = _workflowPhase.asStateFlow()
 
     private val _architectureBlueprint = MutableStateFlow<ArchitectureBlueprint?>(null)
     val architectureBlueprint: StateFlow<ArchitectureBlueprint?> = _architectureBlueprint.asStateFlow()
 
-    // --- Networking Setup ---
     private val client = OkHttpClient.Builder().build()
     private val retrofit = Retrofit.Builder()
         .baseUrl("https://api.github.com/")
@@ -223,14 +213,12 @@ class MainViewModel(private val context: Context) : ViewModel() {
     private val githubApi = retrofit.create(GitHubApiService::class.java)
     private val gson = Gson()
 
-    // --- Logger ---
     fun log(category: String, msg: String) {
         val timestamp = System.currentTimeMillis().toString().takeLast(4)
         val formattedMsg = "[$category] > $msg"
         _terminalLogs.value = _terminalLogs.value + "[$timestamp] $formattedMsg"
     }
 
-    // --- 1. PHASE 1: DISCUSSION (Chips) ---
     fun triggerArchitectInsight(topic: String) {
         viewModelScope.launch {
             val response = when(topic) {
@@ -243,7 +231,6 @@ class MainViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // --- 2. PHASE 2: FINALIZATION (Blueprint) ---
     fun generateBlueprint(userRequirement: String) {
         if (_isBuilding.value) return
         viewModelScope.launch {
@@ -282,12 +269,11 @@ class MainViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // --- 3. PHASE 3: ORCHESTRATOR (Finalize / Build) ---
     fun startAutonomousBuild(projectName: String) {
         if (_isBuilding.value) return
         viewModelScope.launch {
             _isBuilding.value = true
-            _workflowStep.value = 2 // Generation
+            _workflowStep.value = 2
             _workflowPhase.value = WorkflowPhase.Execution
             _terminalLogs.value = emptyList()
             _manifestFiles.value = emptyList()
@@ -295,29 +281,23 @@ class MainViewModel(private val context: Context) : ViewModel() {
             try {
                 val projectRoot = ProjectDirectoryManager.createProjectRoot(context, projectName)
                 log("AUTH", "Authenticating with Gemini & GitHub APIs...")
-
-                // 1. Generate Files
                 log("ARCH", "Project Directory: ${projectRoot.absolutePath}")
+                
                 val files = generateArchitectureFiles("Build a ${_architectureBlueprint.value?.type ?: "Android"} app for ${projectName}")
 
-                // Update Manifest with Syncing status
                 val manifestWithStatus = files.map { it.copy(status = FileStatus.Syncing) }
                 _manifestFiles.value = manifestWithStatus
                 log("GEN", "Generated ${files.size} file blueprints.")
 
-                // Save Locally
                 _architectureBlueprint.value?.let { ProjectDirectoryManager.saveArchitectureMd(projectRoot, it) }
                 files.forEach { ProjectDirectoryManager.saveFile(projectRoot, it.path, it.content) }
 
-                // Mark as Ready
                 _manifestFiles.value = _manifestFiles.value.map { it.copy(status = FileStatus.Ready) }
 
-                // 2. Sync
                 _workflowStep.value = 3
                 log("GIT", "Initializing repo and pushing CI/CD workflow...")
                 syncToGitHub(projectName, files)
 
-                // 3. Deploy
                 _workflowStep.value = 4
                 log("DEPLOY", "Triggering GitHub Actions for testing...")
                 dispatchAction()
@@ -350,7 +330,6 @@ class MainViewModel(private val context: Context) : ViewModel() {
             val cleanJson = response.text?.replace("```json", "")?.replace("```", "")
             val architectResponse = gson.fromJson(cleanJson, ArchitectResponse::class.java)
 
-            // Mapping logic robustly handles the ProjectFile creation
             architectResponse.files.map { file ->
                 val name = file.path.substringAfterLast("/")
                 ProjectFile(name, file.path, file.content)
@@ -734,7 +713,248 @@ fun ActionCard(
     }
 }
 
-// --- TERMINAL PAGE (FIXED: Smart Cast & Modifier Casing) ---
+// --- TERMINAL PAGE & COMPONENTS ---
+
+@Composable
+fun BlueprintRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.Gray, fontSize = 10.sp)
+        Text(value, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun ArchitectureBlueprintView(
+    modifier: Modifier = Modifier,
+    blueprint: ArchitectureBlueprint
+) {
+    Card(
+        colors = CardDefaults.cardColors(Color(0xFF1E293B)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                text = "ARCHITECTURE BLUEPRINT",
+                color = Violet,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            BlueprintRow("HLD Type", blueprint.type)
+            BlueprintRow("Infrastructure", blueprint.infra)
+            BlueprintRow("Security", blueprint.security)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = blueprint.summary,
+                color = Color.White,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun ProjectPanel(
+    modifier: Modifier = Modifier,
+    phase: WorkflowPhase,
+    currentStep: Int,
+    steps: List<WorkflowStep>,
+    logs: List<String>,
+    manifest: List<ProjectFile>,
+    terminalListState: LazyListState,
+    blueprint: ArchitectureBlueprint?
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0B1120))
+            .padding(12.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "WORKFLOW",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = phase.name,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 10.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                steps.forEach { step ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .background(
+                                    if (step.id <= currentStep) Emerald else Color(0xFF1E293B),
+                                    CircleShape
+                                )
+                                .border(1.dp, Color.Gray, CircleShape)
+                        ) {
+                            if (step.id < currentStep) Icon(
+                                Icons.Default.CheckCircle,
+                                null,
+                                tint = Color.Black,
+                                modifier = Modifier.padding(2.dp)
+                            )
+                        }
+                        Text(
+                            text = step.title,
+                            color = Color.Gray,
+                            fontSize = 8.sp
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier = Modifier.height(12.dp))
+
+            if (phase == WorkflowPhase.Blueprint && blueprint != null) {
+                ArchitectureBlueprintView(
+                    modifier = Modifier.fillMaxWidth(),
+                    blueprint = blueprint
+                )
+                Spacer(Modifier = Modifier.height(12.dp))
+            }
+
+            Text(
+                text = "TERMINAL OUTPUT",
+                color = Color.Gray,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
+                    .background(Color.Black, RoundedCornerShape(8.dp))
+                    .padding(8.dp)
+            ) {
+                LazyColumn(
+                    state = terminalListState,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(logs) { log ->
+                        Text(
+                            text = log,
+                            color = TerminalGreen,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        VerticalDivider(
+            modifier = Modifier.fillMaxHeight(),
+            color = Color.Gray.copy(alpha = 0.3f)
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(0.6f)
+                .padding(start = 12.dp)
+        ) {
+            Text(
+                text = "FILE MANIFEST",
+                color = Color.Gray,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (manifest.isEmpty()) {
+                    if (phase == WorkflowPhase.Discussion) {
+                        item {
+                            Text(
+                                text = "WAITING FOR BLUEPRINT...",
+                                color = Color.Gray,
+                                fontSize = 10.sp
+                            )
+                        }
+                    } else {
+                        item {
+                            Text(
+                                text = "GENERATING FILES...",
+                                color = Color.Gray,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+                items(manifest) { file ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E293B), RoundedCornerShape(4.dp))
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Code,
+                            null,
+                            tint = Violet,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = file.name,
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = file.path,
+                                color = Color.Gray,
+                                fontSize = 9.sp,
+                                maxLines = 1
+                            )
+                        }
+                        when (file.status) {
+                            FileStatus.Syncing -> CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            FileStatus.Ready -> Icon(
+                                Icons.Default.CheckCircle,
+                                null,
+                                tint = Emerald,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            FileStatus.Error -> Icon(
+                                Icons.Default.ArrowBack,
+                                null,
+                                tint = Color.Red,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            else -> Box {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProjectMode: Boolean) {
@@ -748,20 +968,21 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
     val listState = rememberLazyListState()
     var isGenerating by remember { mutableStateOf(false) }
 
-    // Collect State
     val logs by viewModel.terminalLogs.collectAsState()
     val manifest by viewModel.manifestFiles.collectAsState()
     val currentStep by viewModel.workflowStep.collectAsState()
     val building by viewModel.isBuilding.collectAsState()
     val steps by viewModel.workflowSteps.collectAsState()
     val phase by viewModel.workflowPhase.collectAsState()
-    val blueprint by viewModel.architectureBlueprint.collectAsState()
+
+    // Smart cast fix
+    val blueprintState by viewModel.architectureBlueprint.collectAsState()
+    val bp = blueprintState
 
     val terminalListState = rememberLazyListState()
 
-    LaunchedEffect(logs.size) { if(logs.isNotEmpty()) terminalListState.animateScrollToItem(logs.size - 1) }
+    LaunchedEffect(logs.size) { if (logs.isNotEmpty()) terminalListState.animateScrollToItem(logs.size - 1) }
 
-    // Init Welcome
     LaunchedEffect(Unit) {
         if (messages.isEmpty()) {
             val welcomeMsg = if (isProjectMode) {
@@ -779,12 +1000,12 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
         var tempKey by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("CORE INITIALIZATION") },
+            title = { Text(text = "CORE INITIALIZATION") },
             text = {
                 OutlinedTextField(
                     value = tempKey,
                     onValueChange = { tempKey = it },
-                    label = { Text("Enter Gemini API Key") },
+                    label = { Text(text = "Enter Gemini API Key") },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -795,13 +1016,12 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                         apiKey = tempKey
                         showApiKeyDialog = false
                     }
-                }) { Text("INITIALIZE") }
+                }) { Text(text = "INITIALIZE") }
             }
         )
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // --- SPLIT LOGIC ---
         if (isProjectMode) {
             val chatWeight = if (phase == WorkflowPhase.Discussion) 1f else 0.5f
 
@@ -817,25 +1037,33 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                     }) }
                 }
 
-                // --- PHASE 1: CHIPS ---
                 if (phase == WorkflowPhase.Discussion) {
                     Column(Modifier.padding(horizontal = 16.dp)) {
-                        Text("Architect Insights", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text(
+                            text = "Architect Insights",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray
+                        )
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Propose Microservices") }, label = { Text("Microservices", fontSize = 11.sp) })
-                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Apply Zero-Trust Security") }, label = { Text("Zero-Trust", fontSize = 11.sp) })
-                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Setup CI/CD Pipeline") }, label = { Text("CI/CD", fontSize = 11.sp) })
+                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Propose Microservices") }, label = { Text(text = "Microservices", fontSize = 11.sp) })
+                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Apply Zero-Trust Security") }, label = { Text(text = "Zero-Trust", fontSize = 11.sp) })
+                            SuggestionChip(onClick = { viewModel.triggerArchitectInsight("Setup CI/CD Pipeline") }, label = { Text(text = "CI/CD", fontSize = 11.sp) })
                         }
                     }
                 }
 
-                // --- PHASE 2: BLUEPRINT BUTTON ---
                 if (phase == WorkflowPhase.Blueprint) {
-                    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), color = Color.Transparent) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Surface(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = Color.Transparent
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
                             Button(
                                 onClick = { viewModel.startAutonomousBuild("Project_${System.currentTimeMillis()}") },
                                 colors = ButtonDefaults.buttonColors(containerColor = Emerald, contentColor = Color.Black),
@@ -843,14 +1071,13 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                             ) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("EXECUTE BUILD", fontWeight = FontWeight.Bold)
+                                Text(text = "EXECUTE BUILD", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Input Area
                 Surface(
                     tonalElevation = 12.dp,
                     color = Color(0xFF1E293B),
@@ -864,7 +1091,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                             value = inputText,
                             onValueChange = { inputText = it },
                             modifier = Modifier.weight(1f),
-                            placeholder = { Text("Describe project...") },
+                            placeholder = { Text(text = "Describe project...") },
                             enabled = !building && phase == WorkflowPhase.Discussion,
                             shape = RoundedCornerShape(12.dp),
                             colors = TextFieldDefaults.outlinedTextFieldColors(
@@ -878,12 +1105,11 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                     messages.add(ChatMessage(inputText.trim(), true))
                                     val req = inputText
                                     inputText = ""
-                                    // Logic
                                     if (phase == WorkflowPhase.Discussion) {
                                         scope.launch {
                                             delay(500)
                                             messages.add(ChatMessage("Acknowledged. Ready to define Blueprint.", false))
-                                            // Trigger blueprint generation logic here if desired, or wait for button
+                                            viewModel.generateBlueprint(req)
                                         }
                                     }
                                 }
@@ -902,99 +1128,19 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
 
             HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
 
-            // --- BOTTOM: PROJECT PANEL (Visible in Phase 2 & 3) ---
             if (phase != WorkflowPhase.Discussion) {
-                Row(modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFF0B1120)).padding(12.dp)) {
-                    // Left: Workflow & Terminal
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("WORKFLOW", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text(phase.name, color = MaterialTheme.colorScheme.primary, fontSize = 10.sp)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Steps Visual
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            steps.forEach { step ->
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(
-                                        modifier = Modifier.size(20.dp).background(if (step.id <= currentStep) Emerald else Color(0xFF1E293B), CircleShape).border(1.dp, Color.Gray, CircleShape)
-                                    ) {
-                                        if (step.id < currentStep) Icon(Icons.Default.CheckCircle, null, tint = Color.Black, modifier = Modifier.padding(2.dp))
-                                    }
-                                    Text(step.title, color = Color.Gray, fontSize = 8.sp)
-                                }
-                            }
-                        }
-                        Spacer(Modifier = Modifier.height(12.dp))
-
-                        // --- PHASE 2: BLUEPRINT DETAILS (FIXED SMART CAST) ---
-                        // Create local variable for smart cast
-                        val currentBlueprint = blueprint
-                        if (phase == WorkflowPhase.Blueprint && currentBlueprint != null) {
-                            Card(colors = CardDefaults.cardColors(Color(0xFF1E293B)), modifier = Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("ARCHITECTURE BLUEPRINT", color = Violet, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier = Modifier.height(8.dp))
-                                    BlueprintRow("HLD Type", currentBlueprint.type)
-                                    BlueprintRow("Infrastructure", currentBlueprint.infra)
-                                    BlueprintRow("Security", currentBlueprint.security)
-                                    Spacer(Modifier = Modifier.height(4.dp))
-                                    Text(currentBlueprint.summary, color = Color.White, fontSize = 10.sp, lineHeight = 14.sp)
-                                }
-                            }
-                            Spacer(Modifier = Modifier.height(12.dp))
-                        }
-
-                        Text("TERMINAL OUTPUT", color = Color.Gray, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(modifier = Modifier.fillMaxSize().weight(1f).background(Color.Black, RoundedCornerShape(8.dp)).padding(8.dp)) {
-                            LazyColumn(state = terminalListState, modifier = Modifier.fillMaxSize()) {
-                                items(logs) { log ->
-                                    Text(text = log, color = TerminalGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-                                }
-                            }
-                        }
-                    }
-
-                    VerticalDivider(modifier = Modifier.fillMaxHeight(), color = Color.Gray.copy(alpha = 0.3f))
-
-                    // Right: File Manifest
-                    Column(modifier = Modifier.weight(0.6f).padding(start = 12.dp)) {
-                        Text("FILE MANIFEST", color = Color.Gray, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
-                            if (manifest.isEmpty()) {
-                                if (phase == WorkflowPhase.Discussion) {
-                                    item { Text("WAITING FOR BLUEPRINT...", color = Color.Gray, fontSize = 10.sp) }
-                                } else {
-                                    item { Text("GENERATING FILES...", color = Color.Gray, fontSize = 10.sp) }
-                                }
-                            }
-                            // ProjectFile is now globally accessible, so 'file.path' and 'file.content' work here
-                            items(manifest) { file ->
-                                Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B), RoundedCornerShape(4.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Code, null, tint = Violet, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(file.name, color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
-                                        Text(file.path, color = Color.Gray, fontSize = 9.sp, maxLines = 1)
-                                    }
-                                    // Status Icon
-                                    when(file.status) {
-                                        FileStatus.Syncing -> CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                                        FileStatus.Ready -> Icon(Icons.Default.CheckCircle, null, tint = Emerald, modifier = Modifier.size(16.dp))
-                                        FileStatus.Error -> Icon(Icons.Default.ArrowBack, null, tint = Color.Red, modifier = Modifier.size(16.dp)) // Placeholder for error
-                                        else -> Box {}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                ProjectPanel(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    phase = phase,
+                    currentStep = currentStep,
+                    steps = steps,
+                    logs = logs,
+                    manifest = manifest,
+                    terminalListState = terminalListState,
+                    blueprint = bp
+                )
             }
         } else {
-            // --- STANDARD CHAT MODE ---
             Column(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
@@ -1020,7 +1166,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                             value = inputText,
                             onValueChange = { inputText = it },
                             modifier = Modifier.weight(1f),
-                            placeholder = { Text("Ask anything...") },
+                            placeholder = { Text(text = "Ask anything...") },
                             enabled = !isGenerating,
                             shape = RoundedCornerShape(12.dp),
                             colors = TextFieldDefaults.outlinedTextFieldColors(
@@ -1047,11 +1193,17 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                         messages.add(ChatMessage("", false))
                                         model.generateContentStream(userText).collect { chunk ->
                                             messages.last().let { msg ->
-                                                messages[messages.lastIndex] = msg.copy(text = msg.text + (chunk.text ?: ""))
+                                                messages[messages.lastIndex] =
+                                                    msg.copy(text = msg.text + (chunk.text ?: ""))
                                             }
                                         }
                                     } catch (e: Exception) {
-                                        messages.add(ChatMessage("SYSTEM INTERRUPT: ${e.localizedMessage}", false))
+                                        messages.add(
+                                            ChatMessage(
+                                                "SYSTEM INTERRUPT: ${e.localizedMessage}",
+                                                false
+                                            )
+                                        )
                                     } finally {
                                         isGenerating = false
                                     }
@@ -1073,14 +1225,6 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
 }
 
 @Composable
-fun BlueprintRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.Gray, fontSize = 10.sp)
-        Text(value, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
 fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
     val horizontalAlign = if (msg.isUser) Alignment.End else Alignment.Start
     val bgColor = if (msg.isUser) ElectricBlue else Color(0xFF334155)
@@ -1095,36 +1239,20 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
                 Text(
                     text = if (msg.isUser) "USER" else "CODESTACK_AI",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (msg.isUser) Color.White else MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    color = if (msg.isUser) Color.White else Color(0xFF00E5FF)
                 )
-                Spacer(Modifier = Modifier.height(4.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = msg.text,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontFamily = if (msg.text.contains("```")) FontFamily.Monospace else FontFamily.Default
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
                 )
-
-                if (!msg.isUser && msg.text.contains("```")) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            val rawCode = msg.text.substringAfter("```").substringBeforeLast("```")
-                            val lines = rawCode.lines()
-                            val cleanCode = if (lines.isNotEmpty() && lines[0].trim().let { it == "kotlin" || it == "kt" || it == "java" }) {
-                                lines.drop(1).joinToString("\n")
-                            } else { rawCode }.trim()
-                            onSaveCode(cleanCode)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Violet)
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("SAVE TO VAULT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                if (!msg.isUser) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.End) {
+                        IconButton(onClick = { onSaveCode(msg.text) }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.ContentCopy, "Save", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
             }
@@ -1133,296 +1261,178 @@ fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
 }
 
 // --- VAULT PAGE ---
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultPage(navController: NavController) {
-    val context = LocalContext.current
-    val files = remember {
-        mutableStateListOf<File>().apply {
-            val folder = File(context.getExternalFilesDir(null), "Projects")
-            if (!folder.exists()) folder.mkdirs()
-            addAll(folder.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() } ?: emptyList())
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(8.dp).background(Color.Green, RoundedCornerShape(4.dp)))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("VAULT STATUS: ONLINE", style = MaterialTheme.typography.labelSmall, color = Color.Green)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (files.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("VAULT EMPTY - AWAITING DATA INGESTION", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(files) { file ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        navController.navigate(Screen.Editor.createRoute(file.name))
-                    },
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    ListItem(
-                        headlineContent = { Text(file.name, fontWeight = FontWeight.Bold, color = Color.White) },
-                        supportingContent = {
-                            Text("SIZE: ${file.length() / 1024} KB | TYPE: ${file.extension.uppercase()}", fontSize = 10.sp, color = Color.Gray)
-                        },
-                        leadingContent = {
-                            Icon(
-                                imageVector = if (file.extension == "kt") Icons.Default.Code else Icons.Default.Description,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        trailingContent = {
-                            IconButton(onClick = {
-                                file.delete()
-                                files.remove(file)
-                                Toast.makeText(context, "ASSET PURGED", Toast.LENGTH_SHORT).show()
-                            }) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Red.copy(alpha = 0.7f))
-                            }
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
-                }
-            }
-        }
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Description,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "QUANTUM VAULT",
+            style = MaterialTheme.typography.headlineMedium,
+            color = Color.White
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Access your saved code artifacts and generated files here.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.Gray
+        )
     }
 }
 
 // --- EDITOR PAGE ---
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorPage(navController: NavController, fileName: String) {
-    val context = LocalContext.current
-    val file = remember(fileName) {
-        File(context.getExternalFilesDir(null), "Projects/$fileName")
+    var content by remember { mutableStateOf("// Loading content for $fileName...") }
+    // Mock loading content
+    LaunchedEffect(fileName) {
+        // In a real app, load from file system based on fileName
+        delay(500)
+        content = """
+            fun main() {
+                println("Hello from $fileName")
+                // This is a mock editor view
+            }
+        """.trimIndent()
     }
-    var codeText by remember { mutableStateOf(if (file.exists()) file.readText() else "// New Project File\n\nfun main() {\n    \n}") }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Surface(
-                color = Color(0xFF334155),
-                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-            ) {
-                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Code, null, modifier = Modifier.size(12.dp), tint = Color.Cyan)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(fileName, fontSize = 11.sp, color = Color.White, fontFamily = FontFamily.Monospace)
-                }
-            }
-        }
-
-        Box(modifier = Modifier.weight(1f).padding(4.dp)) {
-            TextField(
-                value = codeText,
-                onValueChange = { codeText = it },
-                modifier = Modifier.fillMaxSize(),
-                textStyle = LocalTextStyle.current.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    color = Color(0xFFCECECE),
-                    lineHeight = 18.sp
-                ),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.primary
-                )
-            )
-        }
-
-        Surface(
-            tonalElevation = 16.dp,
-            color = Color(0xFF1E293B),
-            modifier = Modifier.navigationBarsPadding()
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("UTF-8 | Kotlin Script", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                Button(
-                    onClick = { MainActivity.saveCodeToFile(context, fileName, codeText) },
-                    shape = RoundedCornerShape(4.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.Black)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("COMMIT CHANGES", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                }
+            Text(text = fileName, color = Color.White, fontFamily = FontFamily.Monospace)
+            IconButton(onClick = { /* Save Logic */ }) {
+                Icon(Icons.Default.Save, contentDescription = "Save", tint = Emerald)
             }
         }
+        OutlinedTextField(
+            value = content,
+            onValueChange = { content = it },
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+            ),
+            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, color = Color.White)
+        )
     }
 }
 
 // --- SETTINGS PAGE ---
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPage(navController: NavController) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-
     var geminiKey by remember { mutableStateOf(getApiKey(context)) }
-    var githubKey by remember { mutableStateOf(getGitHubToken(context)) }
-    var isTestingGemini by remember { mutableStateOf(false) }
-    var isTestingGithub by remember { mutableStateOf(false) }
+    var githubToken by remember { mutableStateOf(getGitHubToken(context)) }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
-        Column(
-            modifier = Modifier.padding(padding).padding(24.dp).fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).background(DeepSlate),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "SYSTEM SETTINGS",
+            style = MaterialTheme.typography.headlineMedium,
+            color = Color.White,
+            fontWeight = FontWeight.Bold
+        )
+        
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(Color(0xFF1E293B))
         ) {
-            Text("System Configuration", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Gemini API Key", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                Spacer(modifier = Modifier.height(8.dp))
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(text = "API Keys", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 OutlinedTextField(
                     value = geminiKey,
-                    onValueChange = { geminiKey = it },
+                    onValueChange = { 
+                        geminiKey = it
+                        saveApiKey(context, it)
+                    },
+                    label = { Text(text = "Gemini API Key") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(focusedBorderColor = MaterialTheme.colorScheme.primary),
-                    trailingIcon = {
-                        Button(
-                            onClick = {
-                                if (geminiKey.isNotBlank()) {
-                                    isTestingGemini = true
-                                    scope.launch {
-                                        delay(1000)
-                                        isTestingGemini = false
-                                        snackbarHostState.showSnackbar("Gemini Connection: SUCCESS")
-                                    }
-                                }
-                            },
-                            enabled = !isTestingGemini,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.primary)
-                        ) { Text(if (isTestingGemini) "Pinging..." else "Test", fontSize = 12.sp) }
-                    }
+                    visualTransformation = PasswordVisualTransformation()
                 )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("GitHub Token", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                Spacer(modifier = Modifier.height(8.dp))
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 OutlinedTextField(
-                    value = githubKey,
-                    onValueChange = { githubKey = it },
+                    value = githubToken,
+                    onValueChange = { 
+                        githubToken = it
+                        saveGitHubToken(context, it)
+                    },
+                    label = { Text(text = "GitHub Token") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(focusedBorderColor = MaterialTheme.colorScheme.secondary),
-                    trailingIcon = {
-                        Button(
-                            onClick = {
-                                if (githubKey.isNotBlank()) {
-                                    isTestingGithub = true
-                                    scope.launch {
-                                        delay(1200)
-                                        isTestingGithub = false
-                                        snackbarHostState.showSnackbar("GitHub Connection: SUCCESS")
-                                    }
-                                }
-                            },
-                            enabled = !isTestingGithub,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.secondary)
-                        ) { Text(if (isTestingGithub) "Pinging..." else "Test", fontSize = 12.sp) }
-                    }
+                    visualTransformation = PasswordVisualTransformation()
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Note: Token requires 'repo' and 'workflow' scopes.", style = MaterialTheme.typography.bodySmall, color = Color.Gray.copy(alpha = 0.7f), fontSize = 11.sp)
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Button(
-                onClick = {
-                    saveApiKey(context, geminiKey)
-                    saveGitHubToken(context, githubKey)
-                    scope.launch {
-                        snackbarHostState.showSnackbar("Configuration Saved Successfully")
-                        delay(500)
-                        navController.popBackStack()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Emerald)
-            ) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Save Configuration", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 // --- DRAWER CONTENT ---
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(280.dp)
-            .background(Color(0xFF0B1120))
-            .padding(16.dp)
-    ) {
+    ModalDrawerSheet {
+        Spacer(modifier = Modifier.height(24.dp))
         Text(
-            "CODESTACK",
+            text = "CODESTACK",
+            modifier = Modifier.padding(16.dp),
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(vertical = 24.dp)
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary
         )
-
-        Divider(color = Color.Gray.copy(alpha = 0.2f))
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        DrawerItem(icon = Icons.Default.Menu, label = "Dashboard", route = Screen.Dashboard.route, onNavigate, onClose)
-        DrawerItem(icon = Icons.Default.Chat, label = "AI Terminal", route = Screen.Terminal.createRoute(false), onNavigate, onClose)
-        DrawerItem(icon = Icons.Default.Code, label = "Vault", route = Screen.Vault.route, onNavigate, onClose)
-        DrawerItem(icon = Icons.Outlined.Settings, label = "Configuration", route = Screen.Settings.route, onNavigate, onClose)
-
+        HorizontalDivider()
+        
+        NavigationDrawerItem(
+            label = { Text(text = "Dashboard") },
+            selected = false,
+            onClick = { onNavigate(Screen.Dashboard.route) },
+            icon = { Icon(Icons.Default.Menu, contentDescription = null) }
+        )
+        NavigationDrawerItem(
+            label = { Text(text = "Terminal") },
+            selected = false,
+            onClick = { onNavigate(Screen.Terminal.createRoute(false)) },
+            icon = { Icon(Icons.Default.Chat, contentDescription = null) }
+        )
+        NavigationDrawerItem(
+            label = { Text(text = "Vault") },
+            selected = false,
+            onClick = { onNavigate(Screen.Vault.route) },
+            icon = { Icon(Icons.Default.Code, contentDescription = null) }
+        )
+        NavigationDrawerItem(
+            label = { Text(text = "Settings") },
+            selected = false,
+            onClick = { onNavigate(Screen.Settings.route) },
+            icon = { Icon(Icons.Default.Settings, contentDescription = null) }
+        )
+        
         Spacer(modifier = Modifier.weight(1f))
-
-        Divider(color = Color.Gray.copy(alpha = 0.2f))
-
-        DrawerItem(icon = Icons.AutoMirrored.Filled.ExitToApp, label = "Exit App", route = "", onNavigate = {}, onClose)
-    }
-}
-
-@Composable
-fun DrawerItem(icon: ImageVector, label: String, route: String, onNavigate: (String) -> Unit, onClose: () -> Unit) {
-    TextButton(
-        onClick = {
-            if (route.isNotEmpty()) onNavigate(route)
-            onClose()
-        },
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-    ) {
-        Icon(icon, contentDescription = null, tint = Color.Gray)
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        NavigationDrawerItem(
+            label = { Text(text = "Exit") },
+            selected = false,
+            onClick = { /* Handle Exit */ },
+            icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
