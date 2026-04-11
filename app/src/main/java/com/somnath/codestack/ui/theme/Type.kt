@@ -10,7 +10,9 @@ val AppTypography = Typography(
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 16.sp
-    ),
-    // Add other typography styles here if needed, utilizing FontFamily.Monospace for terminal
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.5.sp
+    )
+    /* Add other text styles if necessary */
 )
