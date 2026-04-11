@@ -1,6 +1,7 @@
 package com.somnath.codestack.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -22,15 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.somnath.codestack.model.ArchitectureBlueprint
-import com.somnath.codestack.model.ChatMessage
-import com.somnath.codestack.model.FileStatus
-import com.somnath.codestack.model.ProjectFile
-import com.somnath.codestack.model.WorkflowPhase
-import com.somnath.codestack.model.WorkflowStep
-import com.somnath.codestack.ui.theme.Emerald
-import com.somnath.codestack.ui.theme.TerminalGreen
-import com.somnath.codestack.ui.theme.Violet
+import com.somnath.codestack.model.*
+import com.somnath.codestack.ui.theme.*
 
 @Composable
 fun ChatBubble(message: ChatMessage, onSaveCode: (String) -> Unit) {
