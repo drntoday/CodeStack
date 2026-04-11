@@ -47,13 +47,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -68,7 +75,6 @@ import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,6 +85,14 @@ import okhttp3.ResponseBody
 import retrofit2.Retrofit
 import retrofit2.http.*
 import java.io.File
+import java.util.UUID
+
+// STABLE 2026 GOOGLE AI SDK
+
+/**
+ * CODESTACK - ARCHITECT WORKFLOW EDITION
+ * VERSION: 4.1.0 (PHASE-BASED UI)
+ */
 
 // --- DATA MODELS (Moved to top level for Global Access) ---
 
@@ -111,8 +125,7 @@ enum class WorkflowPhase {
 
 data class WorkflowStep(val id: Int, val title: String)
 
-
-// --- COLORS & THEME ---
+// --- Colors & Theme ---
 private val DeepSlate = Color(0xFF0f172a)
 private val ElectricBlue = Color(0xFF3B82F6)
 private val Violet = Color(0xFF8B5CF6)
@@ -120,7 +133,7 @@ private val SlateCard = Color(0xFF64748B)
 private val Emerald = Color(0xFF10b981)
 private val TerminalGreen = Color(0xFF00FF00)
 
-// --- HELPER: ProjectDirectoryManager ---
+// --- Helper: ProjectDirectoryManager ---
 object ProjectDirectoryManager {
     fun createProjectRoot(context: Context, projectName: String): File {
         val root = File(context.getExternalFilesDir(null), "CodeStack/$projectName")
@@ -148,7 +161,7 @@ object ProjectDirectoryManager {
     }
 }
 
-// --- GITHUB API INTERFACE ---
+// --- GitHub API Interface ---
 interface GitHubApiService {
     @POST("user/repos")
     suspend fun createRepo(@Body request: JsonObject): ResponseBody
@@ -217,7 +230,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
         _terminalLogs.value = _terminalLogs.value + "[$timestamp] $formattedMsg"
     }
 
-    // --- 1. PHASE 1: DISCUSSION ---
+    // --- 1. PHASE 1: DISCUSSION (Chips) ---
     fun triggerArchitectInsight(topic: String) {
         viewModelScope.launch {
             val response = when(topic) {
@@ -269,7 +282,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // --- 3. PHASE 3: ORCHESTRATOR ---
+    // --- 3. PHASE 3: ORCHESTRATOR (Finalize / Build) ---
     fun startAutonomousBuild(projectName: String) {
         if (_isBuilding.value) return
         viewModelScope.launch {
@@ -336,7 +349,7 @@ class MainViewModel(private val context: Context) : ViewModel() {
             val response = model.generateContent(prompt)
             val cleanJson = response.text?.replace("```json", "")?.replace("```", "")
             val architectResponse = gson.fromJson(cleanJson, ArchitectResponse::class.java)
-            
+
             // Mapping logic robustly handles the ProjectFile creation
             architectResponse.files.map { file ->
                 val name = file.path.substringAfterLast("/")
@@ -935,7 +948,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
 
                         Text("TERMINAL OUTPUT", color = Color.Gray, fontSize = 12.sp)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Box(Modifier.fillMaxSize().weight(1f).background(Color.Black, RoundedCornerShape(8.dp)).padding(8.dp)) {
+                        Box(modifier = Modifier.fillMaxSize().weight(1f).background(Color.Black, RoundedCornerShape(8.dp)).padding(8.dp)) {
                             LazyColumn(state = terminalListState, modifier = Modifier.fillMaxSize()) {
                                 items(logs) { log ->
                                     Text(text = log, color = TerminalGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
@@ -944,7 +957,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                         }
                     }
 
-                    VerticalDivider(Modifier.fillMaxHeight(), color = Color.Gray.copy(alpha = 0.3f))
+                    VerticalDivider(modifier = Modifier.fillMaxHeight(), color = Color.Gray.copy(alpha = 0.3f))
 
                     // Right: File Manifest
                     Column(modifier = Modifier.weight(0.6f).padding(start = 12.dp)) {
@@ -960,10 +973,10 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                             }
                             // ProjectFile is now globally accessible, so 'file.path' and 'file.content' work here
                             items(manifest) { file ->
-                                Row(Modifier.fillMaxWidth().background(Color(0xFF1E293B), RoundedCornerShape(4.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B), RoundedCornerShape(4.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Code, null, tint = Violet, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Column(Modifier.weight(1f)) {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(file.name, color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
                                         Text(file.path, color = Color.Gray, fontSize = 9.sp, maxLines = 1)
                                     }
@@ -1061,7 +1074,7 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
 
 @Composable
 fun BlueprintRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Color.Gray, fontSize = 10.sp)
         Text(value, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
@@ -1132,17 +1145,17 @@ fun VaultPage(navController: NavController) {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(Color.Green, RoundedCornerShape(4.dp)))
-            Spacer(Modifier.width(8.dp))
+            Box(modifier = Modifier.size(8.dp).background(Color.Green, RoundedCornerShape(4.dp)))
+            Spacer(modifier = Modifier.width(8.dp))
             Text("VAULT STATUS: ONLINE", style = MaterialTheme.typography.labelSmall, color = Color.Green)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
         if (files.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("VAULT EMPTY - AWAITING DATA INGESTION", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -1195,15 +1208,15 @@ fun EditorPage(navController: NavController, fileName: String) {
     }
     var codeText by remember { mutableStateOf(if (file.exists()) file.readText() else "// New Project File\n\nfun main() {\n    \n}") }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(horizontal = 16.dp, vertical = 8.dp)) {
             Surface(
                 color = Color(0xFF334155),
                 shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
             ) {
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Code, null, modifier = Modifier.size(12.dp), tint = Color.Cyan)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(fileName, fontSize = 11.sp, color = Color.White, fontFamily = FontFamily.Monospace)
                 }
             }
@@ -1236,7 +1249,7 @@ fun EditorPage(navController: NavController, fileName: String) {
             modifier = Modifier.navigationBarsPadding()
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1247,7 +1260,7 @@ fun EditorPage(navController: NavController, fileName: String) {
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.Black)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("COMMIT CHANGES", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
@@ -1355,7 +1368,7 @@ fun SettingsPage(navController: NavController) {
                 colors = ButtonDefaults.buttonColors(containerColor = Emerald)
             ) {
                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black)
-                Spacer(Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Save Configuration", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
