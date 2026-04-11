@@ -33,8 +33,7 @@ import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.somnath.codestack.MainActivity
 import com.somnath.codestack.Screen
-import com.somnath.codestack.model.ChatMessage
-import com.somnath.codestack.model.WorkflowPhase
+import com.somnath.codestack.model.*
 import com.somnath.codestack.ui.components.ApiKeyDialog
 import com.somnath.codestack.ui.components.ChatBubble
 import com.somnath.codestack.ui.components.ProjectPanel
