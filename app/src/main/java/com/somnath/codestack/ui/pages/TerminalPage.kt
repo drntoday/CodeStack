@@ -1,11 +1,13 @@
 package com.somnath.codestack.ui.pages
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
@@ -30,18 +32,20 @@ import androidx.navigation.NavController
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.somnath.codestack.MainActivity
+import com.somnath.codestack.Screen
 import com.somnath.codestack.model.ChatMessage
 import com.somnath.codestack.model.WorkflowPhase
 import com.somnath.codestack.ui.components.ApiKeyDialog
 import com.somnath.codestack.ui.components.ChatBubble
 import com.somnath.codestack.ui.components.ProjectPanel
+import com.somnath.codestack.ui.theme.Emerald
 import com.somnath.codestack.util.getApiKey
 import com.somnath.codestack.util.saveApiKey
-import com.somnath.codestack.ui.theme.Emerald
 import com.somnath.codestack.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProjectMode: Boolean) {
     val context = LocalContext.current
