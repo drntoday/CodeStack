@@ -16,10 +16,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -820,14 +821,14 @@ fun ProjectPanel(
                     }
                 }
             }
-            Spacer(Modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
             if (phase == WorkflowPhase.Blueprint && blueprint != null) {
                 ArchitectureBlueprintView(
                     modifier = Modifier.fillMaxWidth(),
                     blueprint = blueprint
                 )
-                Spacer(Modifier = Modifier.height(12.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
             Text(
@@ -1198,12 +1199,8 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                             }
                                         }
                                     } catch (e: Exception) {
-                                        messages.add(
-                                            ChatMessage(
-                                                "SYSTEM INTERRUPT: ${e.localizedMessage}",
-                                                false
-                                            )
-                                        )
+                                        messages.removeAt(messages.lastIndex)
+                                        messages.add(ChatMessage("Error: ${e.message}", false))
                                     } finally {
                                         isGenerating = false
                                     }
@@ -1215,224 +1212,233 @@ fun TerminalPage(navController: NavController, viewModel: MainViewModel, isProje
                                 contentColor = Color.Black
                             )
                         ) {
-                            Icon(Icons.Default.Send, "Execute")
+                            Icon(Icons.Default.Send, "Send")
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// --- HELPER COMPOSABLES ---
+
+@Composable
+fun ChatBubble(message: ChatMessage, onSaveCode: (String) -> Unit) {
+    val isUser = message.isUser
+    val backgroundColor = if (isUser) ElectricBlue else Color(0xFF1E293B)
+    val alignment = if (isUser) Alignment.End else Alignment.Start
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = alignment
+    ) {
+        Row(
+            modifier = Modifier
+                .background(backgroundColor, RoundedCornerShape(12.dp))
+                .padding(12.dp)
+                .widthIn(max = 280.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = message.text,
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        if (!isUser && message.text.contains("```")) {
+            TextButton(
+                onClick = { onSaveCode(message.text) },
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text("Save Code", color = MaterialTheme.colorScheme.primary, fontSize = 10.sp)
             }
         }
     }
 }
 
 @Composable
-fun ChatBubble(msg: ChatMessage, onSaveCode: (String) -> Unit) {
-    val horizontalAlign = if (msg.isUser) Alignment.End else Alignment.Start
-    val bgColor = if (msg.isUser) ElectricBlue else Color(0xFF334155)
-
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = horizontalAlign) {
-        Card(
-            shape = RoundedCornerShape(if (msg.isUser) 16.dp else 4.dp),
-            colors = CardDefaults.cardColors(containerColor = bgColor),
-            modifier = Modifier.widthIn(max = 320.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = if (msg.isUser) "USER" else "CODESTACK_AI",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (msg.isUser) Color.White else Color(0xFF00E5FF)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = msg.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
-                )
-                if (!msg.isUser) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.End) {
-                        IconButton(onClick = { onSaveCode(msg.text) }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.ContentCopy, "Save", tint = Color.Gray, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-        }
+fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DeepSlate)
+            .padding(16.dp)
+    ) {
+        Text(
+            "CODESTACK",
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color.White,
+            modifier = Modifier.padding(vertical = 24.dp)
+        )
+        DrawerItem("Dashboard", Screen.Dashboard.route, onNavigate, onClose)
+        DrawerItem("Terminal", Screen.Terminal.route, onNavigate, onClose)
+        DrawerItem("Vault", Screen.Vault.route, onNavigate, onClose)
+        DrawerItem("Settings", Screen.Settings.route, onNavigate, onClose)
     }
 }
 
-// --- VAULT PAGE ---
+@Composable
+fun DrawerItem(title: String, route: String, onNavigate: (String) -> Unit, onClose: () -> Unit) {
+    TextButton(
+        onClick = { onNavigate(route); onClose() },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Text(title, color = Color.White)
+    }
+}
+
 @Composable
 fun VaultPage(navController: NavController) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Description,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(64.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+    val context = LocalContext.current
+    val files = remember {
+        context.getExternalFilesDir("Projects")?.listFiles()?.toList() ?: emptyList()
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
-            text = "QUANTUM VAULT",
+            "QUANTUM VAULT",
             style = MaterialTheme.typography.headlineMedium,
             color = Color.White
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Access your saved code artifacts and generated files here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray
-        )
+        Spacer(Modifier.height(16.dp))
+        LazyColumn {
+            items(files) { file ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clickable { navController.navigate(Screen.Editor.createRoute(file.name)) },
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            file.name,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f),
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1
+                        )
+                        Icon(
+                            Icons.Default.Create,
+                            contentDescription = "Edit",
+                            tint = Violet,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
-// --- EDITOR PAGE ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorPage(navController: NavController, fileName: String) {
-    var content by remember { mutableStateOf("// Loading content for $fileName...") }
-    // Mock loading content
+    var content by remember { mutableStateOf("") }
+    val context = LocalContext.current
+
     LaunchedEffect(fileName) {
-        // In a real app, load from file system based on fileName
-        delay(500)
-        content = """
-            fun main() {
-                println("Hello from $fileName")
-                // This is a mock editor view
-            }
-        """.trimIndent()
+        try {
+            val file = File(context.getExternalFilesDir("Projects"), fileName)
+            if (file.exists()) content = file.readText()
+        } catch (e: Exception) {
+            // Handle error
+        }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DeepSlate)
+                .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = fileName, color = Color.White, fontFamily = FontFamily.Monospace)
-            IconButton(onClick = { /* Save Logic */ }) {
+            Text(
+                fileName,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = {
+                MainActivity.saveCodeToFile(context, fileName, content)
+                navController.popBackStack()
+            }) {
                 Icon(Icons.Default.Save, contentDescription = "Save", tint = Emerald)
             }
         }
         OutlinedTextField(
             value = content,
             onValueChange = { content = it },
-            modifier = Modifier.fillMaxSize().padding(8.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                containerColor = Color.Transparent,
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent
             ),
-            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, color = Color.White)
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontFamily = FontFamily.Monospace,
+                color = Color.White
+            )
         )
     }
 }
 
-// --- SETTINGS PAGE ---
 @Composable
 fun SettingsPage(navController: NavController) {
     val context = LocalContext.current
     var geminiKey by remember { mutableStateOf(getApiKey(context)) }
     var githubToken by remember { mutableStateOf(getGitHubToken(context)) }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp).background(DeepSlate),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
-            text = "SYSTEM SETTINGS",
+            "SETTINGS",
             style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
-            fontWeight = FontWeight.Bold
+            color = Color.White
         )
-        
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(Color(0xFF1E293B))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "API Keys", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                OutlinedTextField(
-                    value = geminiKey,
-                    onValueChange = { 
-                        geminiKey = it
-                        saveApiKey(context, it)
-                    },
-                    label = { Text(text = "Gemini API Key") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                OutlinedTextField(
-                    value = githubToken,
-                    onValueChange = { 
-                        githubToken = it
-                        saveGitHubToken(context, it)
-                    },
-                    label = { Text(text = "GitHub Token") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
-            }
-        }
-    }
-}
+        Spacer(Modifier.height(24.dp))
 
-// --- DRAWER CONTENT ---
-@Composable
-fun DrawerContent(onNavigate: (String) -> Unit, onClose: () -> Unit) {
-    ModalDrawerSheet {
-        Spacer(modifier = Modifier.height(24.dp))
+        OutlinedTextField(
+            value = geminiKey,
+            onValueChange = { 
+                geminiKey = it
+                saveApiKey(context, it)
+            },
+            label = { Text("Gemini API Key") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        Spacer(Modifier.height(16.dp))
+        
+        OutlinedTextField(
+            value = githubToken,
+            onValueChange = { 
+                githubToken = it
+                saveGitHubToken(context, it)
+            },
+            label = { Text("GitHub Token") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        
+        Spacer(Modifier.height(24.dp))
+        
         Text(
-            text = "CODESTACK",
-            modifier = Modifier.padding(16.dp),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary
+            "Note: Keys are stored locally on device.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
         )
-        HorizontalDivider()
-        
-        NavigationDrawerItem(
-            label = { Text(text = "Dashboard") },
-            selected = false,
-            onClick = { onNavigate(Screen.Dashboard.route) },
-            icon = { Icon(Icons.Default.Menu, contentDescription = null) }
-        )
-        NavigationDrawerItem(
-            label = { Text(text = "Terminal") },
-            selected = false,
-            onClick = { onNavigate(Screen.Terminal.createRoute(false)) },
-            icon = { Icon(Icons.Default.Chat, contentDescription = null) }
-        )
-        NavigationDrawerItem(
-            label = { Text(text = "Vault") },
-            selected = false,
-            onClick = { onNavigate(Screen.Vault.route) },
-            icon = { Icon(Icons.Default.Code, contentDescription = null) }
-        )
-        NavigationDrawerItem(
-            label = { Text(text = "Settings") },
-            selected = false,
-            onClick = { onNavigate(Screen.Settings.route) },
-            icon = { Icon(Icons.Default.Settings, contentDescription = null) }
-        )
-        
-        Spacer(modifier = Modifier.weight(1f))
-        NavigationDrawerItem(
-            label = { Text(text = "Exit") },
-            selected = false,
-            onClick = { /* Handle Exit */ },
-            icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) }
-        )
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
