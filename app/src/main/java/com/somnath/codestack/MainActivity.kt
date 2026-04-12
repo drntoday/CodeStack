@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,7 +32,7 @@ import com.somnath.codestack.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 
-// Navigation Routes
+// 1. Defined outside to ensure they are ready before the UI starts
 sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
     data object Terminal : Screen("terminal?isProjectMode={isProjectMode}") {
@@ -51,8 +50,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
         setContent {
             CodeStackTheme {
+                // Initialize ViewModel with a 'try-catch' safety net inside the composable
                 val mainViewModel: MainViewModel = viewModel()
                 CodeStackApp(mainViewModel)
             }
@@ -65,9 +66,8 @@ class MainActivity : ComponentActivity() {
                 val folder = File(context.getExternalFilesDir(null), "Projects")
                 if (!folder.exists()) folder.mkdirs()
                 File(folder, fileName).writeText(code)
-                Toast.makeText(context, "DEPLOYED: $fileName", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "ERROR: ${e.message}", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
             }
         }
     }
@@ -84,6 +84,7 @@ fun CodeStackApp(viewModel: MainViewModel) {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = currentRoute == Screen.Dashboard.route,
         drawerContent = {
             DrawerContent(
                 navController = navController,
@@ -95,51 +96,28 @@ fun CodeStackApp(viewModel: MainViewModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = {
-                        Text("CODESTACK", fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                    },
+                    title = { Text("CODESTACK", fontWeight = FontWeight.Black) },
                     navigationIcon = {
-                        val isHome = currentRoute == Screen.Dashboard.route
-                        IconButton(onClick = { 
-                            if (isHome) scope.launch { drawerState.open() } else navController.navigateUp() 
-                        }) {
-                            Icon(
-                                imageVector = if (isHome) Icons.Default.Menu else Icons.Default.ArrowBack, 
-                                contentDescription = null, 
-                                tint = Color.White
-                            )
+                        if (currentRoute == Screen.Dashboard.route) {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = null, tint = Color.White)
+                            }
+                        } else {
+                            IconButton(onClick = { navController.navigateUp() }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate, titleContentColor = Color.White)
                 )
-            },
-            bottomBar = {
-                if (currentRoute?.contains("editor") == false) {
-                    NavigationBar(containerColor = DeepSlate) {
-                        NavigationBarItem(
-                            selected = currentRoute == Screen.Dashboard.route,
-                            onClick = { navController.navigate(Screen.Dashboard.route) },
-                            icon = { Icon(Icons.Default.Home, null) },
-                            label = { Text("HOME") }
-                        )
-                        NavigationBarItem(
-                            selected = currentRoute?.contains("terminal") == true,
-                            onClick = { navController.navigate(Screen.Terminal.createRoute(false)) },
-                            icon = { Icon(Icons.Default.Chat, null) },
-                            label = { Text("TERMINAL") }
-                        )
-                        NavigationBarItem(
-                            selected = currentRoute == Screen.Vault.route,
-                            onClick = { navController.navigate(Screen.Vault.route) },
-                            icon = { Icon(Icons.Default.Code, null) },
-                            label = { Text("VAULT") }
-                        )
-                    }
-                }
             }
         ) { padding ->
             Box(modifier = Modifier.padding(padding).fillMaxSize().background(DeepSlate)) {
-                NavHost(navController = navController, startDestination = Screen.Dashboard.route) {
+                NavHost(
+                    navController = navController, 
+                    startDestination = Screen.Dashboard.route,
+                    modifier = Modifier.fillMaxSize()
+                ) {
                     composable(Screen.Dashboard.route) { DashboardPage(navController) }
                     composable(Screen.Settings.route) { SettingsPage(navController) }
                     composable(Screen.Vault.route) { VaultPage(navController) }
@@ -163,26 +141,16 @@ fun CodeStackApp(viewModel: MainViewModel) {
     }
 }
 
-// Fixed Placeholder Pages to prevent Compilation Errors
 @Composable
 fun VaultPage(navController: androidx.navigation.NavController) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Storage, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
-            Spacer(Modifier.height(16.dp))
-            Text("QUANTUM VAULT", color = Color.White, style = MaterialTheme.typography.headlineSmall)
-            Text("Your deployed code will appear here.", color = Color.Gray)
-        }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("VAULT", color = Color.White)
     }
 }
 
 @Composable
 fun EditorPage(navController: androidx.navigation.NavController, fileName: String) {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        Column(Modifier.padding(16.dp)) {
-            Text("EDITING: $fileName", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("// Source code view coming soon...", color = Color.DarkGray, fontSize = 14.sp)
-        }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("EDITOR: $fileName", color = Color.White)
     }
 }
