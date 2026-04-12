@@ -24,13 +24,16 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.somnath.codestack.ui.components.DrawerContent
-import com.somnath.codestack.ui.pages.*
+import com.somnath.codestack.ui.pages.DashboardPage
+import com.somnath.codestack.ui.pages.SettingsPage
+import com.somnath.codestack.ui.pages.TerminalPage
 import com.somnath.codestack.ui.theme.CodeStackTheme
 import com.somnath.codestack.ui.theme.DeepSlate
 import com.somnath.codestack.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 
+// Navigation Routes
 sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
     data object Terminal : Screen("terminal?isProjectMode={isProjectMode}") {
@@ -50,7 +53,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CodeStackTheme {
-                // Initialize the Shared ViewModel at the highest level
                 val mainViewModel: MainViewModel = viewModel()
                 CodeStackApp(mainViewModel)
             }
@@ -63,9 +65,9 @@ class MainActivity : ComponentActivity() {
                 val folder = File(context.getExternalFilesDir(null), "Projects")
                 if (!folder.exists()) folder.mkdirs()
                 File(folder, fileName).writeText(code)
-                Toast.makeText(context, "DEPLOYED TO VAULT: $fileName", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "DEPLOYED: $fileName", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "DEPLOYMENT ERROR: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "ERROR: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -94,12 +96,7 @@ fun CodeStackApp(viewModel: MainViewModel) {
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            "CODESTACK",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
-                        )
+                        Text("CODESTACK", fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                     },
                     navigationIcon = {
                         val isHome = currentRoute == Screen.Dashboard.route
@@ -113,21 +110,15 @@ fun CodeStackApp(viewModel: MainViewModel) {
                             )
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = DeepSlate,
-                        titleContentColor = Color.White
-                    )
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSlate, titleContentColor = Color.White)
                 )
             },
             bottomBar = {
-                // Hide bottom bar on Settings or Editor for a cleaner look
-                if (currentRoute != Screen.Settings.route && currentRoute?.contains("editor") == false) {
+                if (currentRoute?.contains("editor") == false) {
                     NavigationBar(containerColor = DeepSlate) {
                         NavigationBarItem(
                             selected = currentRoute == Screen.Dashboard.route,
-                            onClick = { navController.navigate(Screen.Dashboard.route) {
-                                popUpTo(Screen.Dashboard.route) { inclusive = true }
-                            } },
+                            onClick = { navController.navigate(Screen.Dashboard.route) },
                             icon = { Icon(Icons.Default.Home, null) },
                             label = { Text("HOME") }
                         )
@@ -154,9 +145,7 @@ fun CodeStackApp(viewModel: MainViewModel) {
                     composable(Screen.Vault.route) { VaultPage(navController) }
                     composable(
                         route = Screen.Terminal.route,
-                        arguments = listOf(navArgument("isProjectMode") { 
-                            type = NavType.BoolType; defaultValue = false 
-                        })
+                        arguments = listOf(navArgument("isProjectMode") { type = NavType.BoolType; defaultValue = false })
                     ) { backStack ->
                         val isProject = backStack.arguments?.getBoolean("isProjectMode") ?: false
                         TerminalPage(navController, viewModel, isProject)
@@ -170,6 +159,30 @@ fun CodeStackApp(viewModel: MainViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+// Fixed Placeholder Pages to prevent Compilation Errors
+@Composable
+fun VaultPage(navController: androidx.navigation.NavController) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.Storage, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+            Spacer(Modifier.height(16.dp))
+            Text("QUANTUM VAULT", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+            Text("Your deployed code will appear here.", color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun EditorPage(navController: androidx.navigation.NavController, fileName: String) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("EDITING: $fileName", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            Text("// Source code view coming soon...", color = Color.DarkGray, fontSize = 14.sp)
         }
     }
 }
