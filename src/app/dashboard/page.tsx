@@ -1,137 +1,140 @@
 "use client"
 
 import { useSession, signOut } from "next-auth/react"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-
-interface Message {
-  role: string
-  content: string
-}
+import { useState } from "react"
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const { data: session } = useSession()
+  const [repoInput, setRepoInput] = useState("")
+  const [owner, setOwner] = useState("")
+  const [repo, setRepo] = useState("")
+  const [files, setFiles] = useState<string[]>([])
+  const [selectedFile, setSelectedFile] = useState("")
+  const [fileContent, setFileContent] = useState("")
+  const [chatInput, setChatInput] = useState("")
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/")
-    }
-  }, [status, router])
-
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    )
-  }
-
-  if (!session) {
-    return null
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
-
-    const userMessage: Message = { role: "user", content: input.trim() }
-    const newMessages = [...messages, userMessage]
-    setMessages(newMessages)
-    setInput("")
-    setIsLoading(true)
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
-      })
-
+  const loadFiles = async () => {
+    if (!repoInput.includes("/")) return alert("Enter owner/repo")
+    const [o, r] = repoInput.split("/")
+    setOwner(o)
+    setRepo(r)
+    const res = await fetch("/api/github/tree", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner: o, repo: r }),
+    })
+    if (res.ok) {
       const data = await res.json()
-      if (data.response) {
-        setMessages([...newMessages, { role: "assistant", content: data.response }])
-      } else if (data.error) {
-        setMessages([...newMessages, { role: "assistant", content: `Error: ${data.error}` }])
-      }
-    } catch (error) {
-      setMessages([...newMessages, { role: "assistant", content: "Failed to get response" }])
-    } finally {
-      setIsLoading(false)
+      setFiles(data.files)
     }
   }
+
+  const selectFile = async (path: string) => {
+    setSelectedFile(path)
+    const res = await fetch("/api/github/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, path }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setFileContent(data.content)
+    }
+  }
+
+  const sendMessage = async () => {
+    if (!chatInput.trim()) return
+    const userMsg = { role: "user", content: chatInput }
+    setMessages((prev) => [...prev, userMsg])
+    setChatInput("")
+    setLoading(true)
+
+    // Prepare context about the selected file
+    let contextPrompt = chatInput
+    if (selectedFile && fileContent) {
+      contextPrompt = `[File: ${selectedFile}]\n\`\`\`\n${fileContent}\n\`\`\`\n\n${chatInput}`
+    }
+
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [...messages, { role: "user", content: contextPrompt }],
+      }),
+    })
+    const data = await res.json()
+    if (data.response) {
+      setMessages((prev) => [...prev, { role: "assistant", content: data.response }])
+    }
+    setLoading(false)
+  }
+
+  if (!session) return null
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <header className="border-b border-gray-700 p-4">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <h1 className="text-xl font-bold">Code Stack Control Panel</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-400">{session.user?.email}</span>
-            <button
-              onClick={() => signOut()}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen p-4 bg-gray-900 text-white">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Code Stack</h1>
+        <button onClick={() => signOut()} className="px-4 py-2 bg-red-500 text-white rounded">
+          Sign Out
+        </button>
+      </div>
 
-      <main className="max-w-4xl mx-auto p-4">
-        <div className="bg-gray-800 rounded-lg h-[60vh] overflow-y-auto mb-4 p-4">
-          {messages.length === 0 ? (
-            <p className="text-gray-400 text-center mt-20">
-              Start a conversation with Gemini. Ask coding questions!
-            </p>
-          ) : (
-            messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`mb-4 ${msg.role === "user" ? "text-right" : "text-left"}`}
-              >
-                <div
-                  className={`inline-block px-4 py-2 rounded-lg max-w-[80%] ${
-                    msg.role === "user"
-                      ? "bg-blue-600"
-                      : "bg-gray-700"
-                  }`}
-                >
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                </div>
-              </div>
-            ))
-          )}
-          {isLoading && (
-            <div className="text-left mb-4">
-              <div className="inline-block px-4 py-2 bg-gray-700 rounded-lg">
-                <p className="text-sm text-gray-400">Thinking...</p>
-              </div>
-            </div>
-          )}
-        </div>
+      <div className="mb-4 flex gap-2">
+        <input
+          type="text"
+          placeholder="owner/repo"
+          className="border p-2 rounded w-64 text-black"
+          value={repoInput}
+          onChange={(e) => setRepoInput(e.target.value)}
+        />
+        <button onClick={loadFiles} className="px-4 py-2 bg-blue-500 text-white rounded">
+          Load Repo
+        </button>
+      </div>
 
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask Gemini a coding question..."
-            className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
-            disabled={isLoading}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg font-medium"
+      {files.length > 0 && (
+        <div className="flex gap-4 mb-4">
+          <select
+            className="border p-2 rounded w-64 text-black"
+            value={selectedFile}
+            onChange={(e) => selectFile(e.target.value)}
           >
-            Send
-          </button>
-        </form>
-      </main>
+            <option value="">Select a file</option>
+            {files.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          {selectedFile && <span className="text-sm self-center">Loaded: {selectedFile}</span>}
+        </div>
+      )}
+
+      <div className="border rounded h-96 overflow-y-scroll p-4 mb-4 bg-gray-800">
+        {messages.map((m, i) => (
+          <div key={i} className={`mb-2 ${m.role === "user" ? "text-right" : "text-left"}`}>
+            <span className={`inline-block p-2 rounded ${m.role === "user" ? "bg-blue-600" : "bg-gray-700"}`}>
+              {m.content}
+            </span>
+          </div>
+        ))}
+        {loading && <div className="text-center">Thinking...</div>}
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          className="border p-2 rounded flex-1 text-black"
+          placeholder="Ask something about the repo or code..."
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+        />
+        <button onClick={sendMessage} className="px-4 py-2 bg-green-500 text-white rounded">
+          Send
+        </button>
+      </div>
     </div>
   )
 }
