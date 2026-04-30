@@ -23,6 +23,11 @@ export default function Dashboard() {
   const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string }[] | null>(null)
   const [refactorLoading, setRefactorLoading] = useState(false)
   const [refactorMessage, setRefactorMessage] = useState("")
+  const [generatingTests, setGeneratingTests] = useState(false)
+  const [generatedTest, setGeneratedTest] = useState("")
+  const [auditCommit, setAuditCommit] = useState("")
+  const [auditReport, setAuditReport] = useState("")
+  const [auditing, setAuditing] = useState(false)
 
   const generateRefactorPlan = async () => {
     if (!owner || !repo || !refactorPrompt) return alert("Load a repo and enter an instruction first.")
@@ -60,6 +65,33 @@ export default function Dashboard() {
     }
     setRefactorLoading(false)
   }
+
+  const handleGenerateTests = async () => {
+    if (!selectedFile || !fileContent || !owner || !repo) return;
+    setGeneratingTests(true);
+    const res = await fetch("/api/tests/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, filePath: selectedFile, fileContent }),
+    });
+    const data = await res.json();
+    if (data.testContent) setGeneratedTest(data.testContent);
+    else alert("Test generation failed.");
+    setGeneratingTests(false);
+  }
+
+  const handleAudit = async () => {
+    if (!owner || !repo || !auditCommit) return;
+    setAuditing(true);
+    const res = await fetch("/api/audit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, commitSha: auditCommit }),
+    });
+    const data = await res.json();
+    setAuditReport(data.report || "Error");
+    setAuditing(false);
+  };
 
   const loadFiles = async () => {
     if (!repoInput.includes("/")) return alert("Enter owner/repo")
@@ -265,6 +297,38 @@ export default function Dashboard() {
         </div>
       )}
 
+      {selectedFile && (
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={handleGenerateTests}
+            disabled={generatingTests}
+            className="px-4 py-2 bg-teal-500 text-white rounded disabled:opacity-50"
+          >
+            {generatingTests ? "Generating…" : "Generate Tests"}
+          </button>
+          {generatedTest && (
+            <button
+              onClick={() => {
+                setPendingChange(generatedTest);
+                setCommitMessage(`Add tests for ${selectedFile}`);
+              }}
+              className="px-4 py-2 bg-orange-500 text-white rounded"
+            >
+              Apply as new test file
+            </button>
+          )}
+        </div>
+      )}
+      
+      {generatedTest && (
+        <details className="mb-4">
+          <summary className="cursor-pointer text-sm font-semibold">View generated test</summary>
+          <pre className="whitespace-pre-wrap text-xs bg-gray-100 p-2 rounded max-h-40 overflow-auto">
+            {generatedTest}
+          </pre>
+        </details>
+      )}
+
       {/* Chat area */}
       <div className="border rounded h-64 overflow-y-scroll p-4 mb-4 bg-gray-50">
         {messages.map((m, i) => (
@@ -394,6 +458,30 @@ export default function Dashboard() {
           </div>
         )}
         {refactorMessage && <p className="mt-2 text-sm">{refactorMessage}</p>}
+      </div>
+
+      {/* Security Audit Section */}
+      <div className="border rounded p-4 mt-6">
+        <h2 className="text-xl font-bold mb-2">Security Audit</h2>
+        <input
+          type="text"
+          placeholder="Commit SHA"
+          className="border p-2 rounded w-64"
+          value={auditCommit}
+          onChange={(e) => setAuditCommit(e.target.value)}
+        />
+        <button
+          onClick={handleAudit}
+          disabled={auditing}
+          className="ml-2 px-4 py-2 bg-red-500 text-white rounded disabled:opacity-50"
+        >
+          {auditing ? "Scanning…" : "Audit Commit"}
+        </button>
+        {auditReport && (
+          <pre className="mt-3 whitespace-pre-wrap bg-gray-900 text-green-400 p-3 rounded text-sm">
+            {auditReport}
+          </pre>
+        )}
       </div>
     </div>
   )
