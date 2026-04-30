@@ -7,7 +7,7 @@ interface Message {
   role: "user" | "assistant" | "system"
   content: string
   action?: string
-  plan?: Array<{ file: string; instruction: string; reason: string }>
+  plan?: Array<{ file: string; instruction: string; reason: string; enabled?: boolean }>
   testContent?: string
   files?: string[]
   requiresApproval?: boolean
@@ -48,7 +48,7 @@ export default function Dashboard() {
   const [committing, setCommitting] = useState(false)
   
   // Refactor plan state
-  const [refactorPlan, setRefactorPlan] = useState<Array<{ file: string; instruction: string; reason: string; enabled: boolean }> | null>(null)
+  const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string; reason: string; enabled?: boolean }[] | null>(null)
   const [executingRefactor, setExecutingRefactor] = useState(false)
   
   // Generated test state
