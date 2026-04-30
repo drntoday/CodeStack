@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react"
 import { useState } from "react"
 
-export default function DashboardPage() {
+export default function Dashboard() {
   const { data: session } = useSession()
   const [repoInput, setRepoInput] = useState("")
   const [owner, setOwner] = useState("")
@@ -14,6 +14,11 @@ export default function DashboardPage() {
   const [chatInput, setChatInput] = useState("")
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
   const [loading, setLoading] = useState(false)
+  const [pendingChange, setPendingChange] = useState<string | null>(null)
+  const [commitMessage, setCommitMessage] = useState("")
+  const [prTitle, setPrTitle] = useState("")
+  const [prBody, setPrBody] = useState("")
+  const [committing, setCommitting] = useState(false)
 
   const loadFiles = async () => {
     if (!repoInput.includes("/")) return alert("Enter owner/repo")
@@ -41,6 +46,7 @@ export default function DashboardPage() {
     if (res.ok) {
       const data = await res.json()
       setFileContent(data.content)
+      setPendingChange(null) // reset when switching files
     }
   }
 
@@ -51,7 +57,6 @@ export default function DashboardPage() {
     setChatInput("")
     setLoading(true)
 
-    // Prepare context about the selected file
     let contextPrompt = chatInput
     if (selectedFile && fileContent) {
       contextPrompt = `[File: ${selectedFile}]\n\`\`\`\n${fileContent}\n\`\`\`\n\n${chatInput}`
@@ -65,16 +70,124 @@ export default function DashboardPage() {
       }),
     })
     const data = await res.json()
-    if (data.response) {
-      setMessages((prev) => [...prev, { role: "assistant", content: data.response }])
+    if (data.text) {
+      setMessages((prev) => [...prev, { role: "assistant", content: data.text }])
+      // If we have a selected file, treat the AI response as a possible edit
+      if (selectedFile) {
+        setPendingChange(data.text)
+      }
     }
     setLoading(false)
+  }
+
+  const commitDirectly = async () => {
+    if (!pendingChange || !selectedFile) return
+    setCommitting(true)
+    // Get SHA if file exists (update)
+    let sha: string | undefined;
+    if (fileContent) {
+      // Fetch current file sha again? We didn't store sha from file read earlier.
+      // Let's do a quick fetch for the file metadata.
+      const metaRes = await fetch("/api/github/file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, repo, path: selectedFile }),
+      })
+      if (metaRes.ok) {
+        const meta = await metaRes.json()
+        sha = meta.sha
+      }
+    }
+
+    const res = await fetch("/api/github/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner,
+        repo,
+        path: selectedFile,
+        content: pendingChange,
+        message: commitMessage || `Update ${selectedFile}`,
+        branch: "main",
+        sha,
+      }),
+    })
+    if (res.ok) {
+      alert("Committed successfully to main!")
+      // Refresh file content
+      selectFile(selectedFile)
+    } else {
+      const err = await res.json()
+      alert("Commit failed: " + JSON.stringify(err))
+    }
+    setCommitting(false)
+  }
+
+  const commitAndPR = async () => {
+    if (!pendingChange || !selectedFile) return
+    const branchName = `ai-update-${Date.now()}`
+    setCommitting(true)
+
+    // Step 1: Create the new branch (by committing to it with the new file)
+    let sha: string | undefined
+    const metaRes = await fetch("/api/github/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, path: selectedFile }),
+    })
+    if (metaRes.ok) {
+      const meta = await metaRes.json()
+      sha = meta.sha
+    }
+
+    const commitRes = await fetch("/api/github/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner,
+        repo,
+        path: selectedFile,
+        content: pendingChange,
+        message: commitMessage || `Update ${selectedFile}`,
+        branch: branchName,
+        sha,
+      }),
+    })
+
+    if (!commitRes.ok) {
+      const err = await commitRes.json()
+      alert("Failed to create branch: " + JSON.stringify(err))
+      setCommitting(false)
+      return
+    }
+
+    // Step 2: Open a PR
+    const prRes = await fetch("/api/github/pr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner,
+        repo,
+        head: branchName,
+        base: "main",
+        title: prTitle || "AI update",
+        body: prBody || "Changes proposed by Code Stack AI.",
+      }),
+    })
+    if (prRes.ok) {
+      const prData = await prRes.json()
+      alert(`PR created: ${prData.data.html_url}`)
+    } else {
+      const err = await prRes.json()
+      alert("PR creation failed: " + JSON.stringify(err))
+    }
+    setCommitting(false)
   }
 
   if (!session) return null
 
   return (
-    <div className="min-h-screen p-4 bg-gray-900 text-white">
+    <div className="min-h-screen p-4">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Code Stack</h1>
         <button onClick={() => signOut()} className="px-4 py-2 bg-red-500 text-white rounded">
@@ -86,7 +199,7 @@ export default function DashboardPage() {
         <input
           type="text"
           placeholder="owner/repo"
-          className="border p-2 rounded w-64 text-black"
+          className="border p-2 rounded w-64"
           value={repoInput}
           onChange={(e) => setRepoInput(e.target.value)}
         />
@@ -98,7 +211,7 @@ export default function DashboardPage() {
       {files.length > 0 && (
         <div className="flex gap-4 mb-4">
           <select
-            className="border p-2 rounded w-64 text-black"
+            className="border p-2 rounded w-64"
             value={selectedFile}
             onChange={(e) => selectFile(e.target.value)}
           >
@@ -111,10 +224,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="border rounded h-96 overflow-y-scroll p-4 mb-4 bg-gray-800">
+      {/* Chat area */}
+      <div className="border rounded h-64 overflow-y-scroll p-4 mb-4 bg-gray-50">
         {messages.map((m, i) => (
           <div key={i} className={`mb-2 ${m.role === "user" ? "text-right" : "text-left"}`}>
-            <span className={`inline-block p-2 rounded ${m.role === "user" ? "bg-blue-600" : "bg-gray-700"}`}>
+            <span className={`inline-block p-2 rounded max-w-[80%] whitespace-pre-wrap ${m.role === "user" ? "bg-blue-100" : "bg-green-100"}`}>
               {m.content}
             </span>
           </div>
@@ -122,11 +236,11 @@ export default function DashboardPage() {
         {loading && <div className="text-center">Thinking...</div>}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 mb-4">
         <input
           type="text"
-          className="border p-2 rounded flex-1 text-black"
-          placeholder="Ask something about the repo or code..."
+          className="border p-2 rounded flex-1"
+          placeholder="Ask something or request an edit..."
           value={chatInput}
           onChange={(e) => setChatInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
@@ -135,6 +249,69 @@ export default function DashboardPage() {
           Send
         </button>
       </div>
+
+      {/* Pending change preview */}
+      {pendingChange && selectedFile && (
+        <div className="border rounded p-4 mb-4 bg-yellow-50">
+          <h2 className="font-semibold mb-2">Proposed change to {selectedFile}</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-mono bg-gray-200 p-2 rounded">Current</div>
+              <pre className="whitespace-pre-wrap text-xs bg-gray-100 p-2 rounded max-h-40 overflow-auto">{fileContent}</pre>
+            </div>
+            <div>
+              <div className="text-xs font-mono bg-green-200 p-2 rounded">New</div>
+              <pre className="whitespace-pre-wrap text-xs bg-green-50 p-2 rounded max-h-40 overflow-auto">{pendingChange}</pre>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <input
+              type="text"
+              placeholder="Commit message"
+              className="border p-2 rounded w-full"
+              value={commitMessage}
+              onChange={(e) => setCommitMessage(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={commitDirectly}
+                disabled={committing}
+                className="px-4 py-2 bg-orange-500 text-white rounded disabled:opacity-50"
+              >
+                Commit directly to main
+              </button>
+              <button
+                onClick={commitAndPR}
+                disabled={committing}
+                className="px-4 py-2 bg-purple-500 text-white rounded disabled:opacity-50"
+              >
+                Create PR
+              </button>
+            </div>
+            {committing && <span className="text-sm">Working...</span>}
+          </div>
+        </div>
+      )}
+
+      {/* PR details inputs (visible only when PR button is clicked, but we can keep it simple) */}
+      {committing && (
+        <div className="space-y-2 mt-2">
+          <input
+            type="text"
+            placeholder="PR title (if creating PR)"
+            className="border p-2 rounded w-full"
+            value={prTitle}
+            onChange={(e) => setPrTitle(e.target.value)}
+          />
+          <textarea
+            placeholder="PR description"
+            className="border p-2 rounded w-full"
+            value={prBody}
+            onChange={(e) => setPrBody(e.target.value)}
+          />
+        </div>
+      )}
     </div>
   )
 }

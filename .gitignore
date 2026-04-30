@@ -1,1 +1,1 @@
-Nothing needs to be added to .gitignore as the changes only include source code files (.ts, .tsx) and type definition files, with no build artifacts, dependencies, or temporary files present in the file changes.
+Nothing needs to be added to .gitignore since the changes only include source code files (.ts and .tsx) without any build artifacts, dependencies, or temporary files that require ignoring.

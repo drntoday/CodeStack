@@ -25,15 +25,16 @@ export async function POST(req: Request) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
 
     // Convert messages to Gemini format
-    const prompt = messages.map((m: { role: string; content: string }) => 
+    const lastUserMsg = messages[messages.length - 1].content;
+    const prompt = `You are an AI coding assistant. Provide helpful answers. If asked to modify the content of a file, output ONLY the new full content of the file inside a single code block. Do not include any explanations before or after the code block.\n\n${messages.map((m: { role: string; content: string }) => 
       `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
-    ).join('\n')
+    ).join('\n')}`;
 
     const result = await model.generateContent(prompt)
     const response = await result.response
     const text = response.text()
 
-    return new Response(JSON.stringify({ response: text }), {
+    return new Response(JSON.stringify({ text }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     })
