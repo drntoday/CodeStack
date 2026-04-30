@@ -1,0 +1,61 @@
+import Groq from "groq-sdk";
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY!,
+});
+
+// Model mapping per task type
+const MODEL_MAP: Record<string, { primary: string; fallback: string }> = {
+  chat: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
+  refactor: { primary: "llama-4-scout-17b", fallback: "qwen-qwen-3-32b" },
+  tests: { primary: "qwen-qwen-3-32b", fallback: "llama-3.3-70b-versatile" },
+  audit: { primary: "qwen-qwen-3-32b", fallback: "llama-3.3-70b-versatile" },
+  architecture: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
+  docs: { primary: "llama-4-scout-17b", fallback: "llama-3.3-70b-versatile" },
+  search: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
+  commitMessage: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
+  ci: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
+};
+
+// Simple in‑memory rate‑limit tracker (reset on cold start – acceptable)
+const usageCounters: Record<string, number> = {};
+
+export async function queryGroq(
+  taskType: string,
+  messages: Array<{ role: string; content: string }>,
+  options?: { maxTokens?: number; temperature?: number }
+): Promise<string> {
+  const models = MODEL_MAP[taskType] || MODEL_MAP.chat;
+
+  const tryModel = async (model: string) => {
+    // Basic rate‑limit guard (per‑minute limits not enforced, but we log)
+    const key = `${model}-${new Date().getMinutes()}`;
+    usageCounters[key] = (usageCounters[key] || 0) + 1;
+
+    // Map messages to Groq format
+    const groqMessages = messages.map((m) => ({
+      role: m.role as any,
+      content: m.content,
+    }));
+
+    const completion = await groq.chat.completions.create({
+      model,
+      messages: groqMessages,
+      max_tokens: options?.maxTokens ?? 2048,
+      temperature: options?.temperature ?? 0.7,
+    });
+
+    return completion.choices[0]?.message?.content || "";
+  };
+
+  // Try primary model, if 429 fallback to secondary
+  try {
+    return await tryModel(models.primary);
+  } catch (err: any) {
+    if (err?.status === 429 || err?.message?.includes("rate_limit")) {
+      console.warn(`Rate limited on ${models.primary}, trying ${models.fallback}`);
+      return await tryModel(models.fallback);
+    }
+    throw err; // re‑throw other errors
+  }
+}

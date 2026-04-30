@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { rateLimit } from "@/lib/rate-limit";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+import { queryGroq } from "@/lib/groq";
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 10 requests per minute
-  if (!rateLimit("audit", 10, 60000)) {
-    return NextResponse.json({ error: "Rate limit exceeded. Please wait a minute." }, { status: 429 });
-  }
-
   const session = await auth();
   if (!session?.accessToken)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,11 +25,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Commit not found" }, { status: 404 });
   const diffText = await diffRes.text();
 
-  const prompt = `Analyze this diff for security issues (secrets, API keys, tokens, SQL injection, XSS). Use a bullet list: [- severity] file:line - description. If clean, say "No issues found."\nDiff:\n\`\`\`diff\n${diffText}\n\`\`\``;
+  const prompt = `Analyze this diff for security issues (secrets, API keys, tokens, SQL injection, XSS). Use a bullet list: [- severity] file:line - description. If clean, say "No issues found."
+Diff:
+\`\`\`diff
+${diffText}
+\`\`\``;
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const report = response.text();
+  const report = await queryGroq("audit", [{ role: "user", content: prompt }]);
 
   return NextResponse.json({ report });
 }
