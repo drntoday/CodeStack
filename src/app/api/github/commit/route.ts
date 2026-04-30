@@ -35,10 +35,14 @@ export async function POST(req: NextRequest) {
     );
     const data = await response.json();
     if (!response.ok) {
-      return NextResponse.json({ error: data }, { status: response.status });
+      return NextResponse.json({ 
+        error: typeof data.message === 'string' ? data.message : 'GitHub API error',
+        details: data 
+      }, { status: response.status });
     }
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    console.error("Commit error:", error);
+    return NextResponse.json({ error: "Failed to commit changes" }, { status: 500 });
   }
 }

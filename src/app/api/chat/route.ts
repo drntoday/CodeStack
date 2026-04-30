@@ -1,8 +1,17 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { rateLimit } from "@/lib/rate-limit"
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 export async function POST(req: Request) {
+  // Rate limiting: 14 requests per minute (stay under Gemini's 15/min free tier limit)
+  if (!rateLimit("gemini-chat", 14, 60000)) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait a minute." }), {
+      status: 429,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
   try {
     const { messages } = await req.json()
 
@@ -13,7 +22,6 @@ export async function POST(req: Request) {
       })
     }
 
-    // Simple rate limiting check - in production use a proper store
     const apiKey = process.env.GEMINI_API_KEY!
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "API key not configured" }), {
@@ -40,8 +48,8 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     console.error("Gemini API error:", error)
-    return new Response(JSON.stringify({ error: "Failed to get response from Gemini" }), {
-      status: 500,
+    return new Response(JSON.stringify({ error: "AI service unavailable. Check quota or API key." }), {
+      status: 503,
       headers: { "Content-Type": "application/json" },
     })
   }

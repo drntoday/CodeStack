@@ -26,11 +26,12 @@ cp .env.local.example .env.local
 
 Then edit `.env.local`:
 
-- `CODESTACK_CLIENT_ID` - Create an OAuth App at https://github.com/settings/developers
-- `CODESTACK_CLIENT_SECRET` - From your GitHub OAuth App
+- `CODESTACK_GITHUB_ID` - Create an OAuth App at https://github.com/settings/developers
+- `CODESTACK_GITHUB_SECRET` - From your GitHub OAuth App
 - `GEMINI_API_KEY` - Get from https://aistudio.google.com/app/apikey
-- `NEXTAUTH_SECRET` - Generate with `openssl rand -base64 32`
-- `NEXTAUTH_URL` - Your app URL (use `http://localhost:3000` for local dev)
+- `AUTH_SECRET` - Generate with `openssl rand -base64 32`
+- `HEALER_TOKEN` - Fine-grained GitHub PAT for self-healing (see Self-Healing Setup below)
+- `WEBHOOK_SECRET` - Random string for webhook signature validation (see Self-Healing Setup below)
 
 ### Installation
 
@@ -46,11 +47,38 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 1. Push this repo to GitHub
 2. Import the project on Vercel
 3. Add environment variables in Vercel settings:
-   - `CODESTACK_CLIENT_ID`
-   - `CODESTACK_CLIENT_SECRET`
+   - `CODESTACK_GITHUB_ID`
+   - `CODESTACK_GITHUB_SECRET`
    - `GEMINI_API_KEY`
-   - `NEXTAUTH_SECRET`
+   - `AUTH_SECRET`
+   - `HEALER_TOKEN` (for self-healing)
+   - `WEBHOOK_SECRET` (for webhook validation)
 4. Set the callback URL in your GitHub OAuth App to `https://your-app.vercel.app/api/auth/callback/github`
+
+## Self-Healing Setup
+
+To enable automatic CI failure detection and fix suggestions:
+
+1. **Create a GitHub fine-grained personal access token:**
+   - Go to https://github.com/settings/tokens
+   - Create a new fine-grained token with the following permissions:
+     - Contents: read/write
+     - Pull requests: read/write
+     - Actions: read
+   - Store this token as `HEALER_TOKEN` in Vercel environment variables
+
+2. **Configure the webhook in your GitHub repository:**
+   - Go to your GitHub repo → Settings → Webhooks → Add webhook
+   - Payload URL: `https://your-vercel-app.vercel.app/api/webhooks/workflow-failed`
+   - Content type: `application/json`
+   - Secret: Enter a random string (this will be your `WEBHOOK_SECRET`)
+   - Events: Select "Workflow runs" only
+   - Save the webhook
+
+3. **Add the same secret to Vercel:**
+   - In Vercel settings, add `WEBHOOK_SECRET` with the same value you used in the webhook
+
+When a workflow fails, GitHub will notify your app, which will analyze the logs and create a PR with a proposed fix.
 
 ## Project Structure
 

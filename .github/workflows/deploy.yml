@@ -1,0 +1,17 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Deploy
+        run: |
+          echo "Deploying to production..."
+          # Add real deployment commands here (e.g., Vercel deploy trigger, etc.)
+          # For Vercel, you can use the Vercel CLI or just mark it as done.
+          echo "Deploy complete."

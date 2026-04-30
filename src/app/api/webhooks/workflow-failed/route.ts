@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac } from "crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Octokit } from "@octokit/rest";
 
@@ -6,8 +7,28 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 const octokit = new Octokit({ auth: process.env.HEALER_TOKEN });
 
+function verifySignature(payload: string, signature: string): boolean {
+  const secret = process.env.WEBHOOK_SECRET!;
+  if (!secret) return false;
+  const hmac = createHmac("sha256", secret);
+  hmac.update(payload);
+  const digest = "sha256=" + hmac.digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
-  const payload = await req.json();
+  // Verify webhook signature
+  const rawBody = await req.text();
+  const signature = req.headers.get("x-hub-signature-256") || "";
+  if (!verifySignature(rawBody, signature)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+  }
+  
+  const payload = JSON.parse(rawBody);
 
   if (
     payload.action !== "completed" ||
