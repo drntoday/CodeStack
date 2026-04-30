@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { rateLimit } from "@/lib/rate-limit";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+import { queryGroq } from "@/lib/groq";
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 5 requests per minute (OpenAPI generation is expensive)
-  if (!rateLimit("docs-openapi", 5, 60000)) {
-    return NextResponse.json({ error: "Rate limit exceeded. Please wait a minute." }, { status: 429 });
-  }
-
   const session = await auth();
   if (!session?.accessToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { owner, repo } = await req.json();
-  // Fetch all API route files under src/app/api/ (the ones we have)
+  // Fetch all API route files
   const routes = [
     "src/app/api/chat/route.ts",
     "src/app/api/github/file/route.ts",
@@ -28,7 +19,7 @@ export async function POST(req: NextRequest) {
     "src/app/api/tests/generate/route.ts",
     "src/app/api/audit/route.ts",
     "src/app/api/architecture/ask/route.ts",
-    "src/app/api/docs/generate-readme/route.ts", // itself!
+    "src/app/api/docs/generate-readme/route.ts",
     "src/app/api/webhooks/workflow-failed/route.ts"
   ];
   let routeCode = "";
@@ -44,11 +35,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const prompt = `Analyze the following Next.js API route handlers and generate an OpenAPI 3.0 specification (YAML) for all endpoints. Include request bodies, query parameters, and responses. Use sensible summaries.\n\n${routeCode}`;
+  const prompt = `Analyze the following Next.js API route handlers and generate an OpenAPI 3.0 specification (YAML) for all endpoints. Include request bodies, query parameters, and responses. Use sensible summaries.
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const openapi = response.text();
+${routeCode}`;
+
+  const openapi = await queryGroq("docs", [{ role: "user", content: prompt }]);
 
   return NextResponse.json({ openapi });
 }

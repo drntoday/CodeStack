@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  serverExternalPackages: ['@google/generative-ai'],
-};
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

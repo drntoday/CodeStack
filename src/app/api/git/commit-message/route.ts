@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { rateLimit } from "@/lib/rate-limit";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+import { queryGroq } from "@/lib/groq";
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 10 requests per minute
-  if (!rateLimit("git-commit-message", 10, 60000)) {
-    return NextResponse.json({ error: "Rate limit exceeded. Please wait a minute." }, { status: 429 });
-  }
-
   const session = await auth();
   if (!session?.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,11 +15,15 @@ export async function POST(req: NextRequest) {
 
   const diffBlock = `Old:\n\`\`\`\n${oldContent}\n\`\`\`\nNew:\n\`\`\`\n${newContent}\n\`\`\``;
 
-  const prompt = `You are an expert git commit message writer. Write a concise, meaningful commit message (first line < 72 chars, optionally followed by a blank line and more description) that describes the change below${description ? `. The user described the change as: "${description}"` : ""}.\n\nFile: ${filePath || "unknown"}\nChange (diff):\n${diffBlock}\n\nReturn ONLY the commit message, no other text.`;
+  const prompt = `You are an expert git commit message writer. Write a concise, meaningful commit message (first line < 72 chars, optionally followed by a blank line and more description) that describes the change below${description ? `. The user described the change as: "${description}"` : ""}.
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const message = response.text().trim();
+File: ${filePath || "unknown"}
+Change (diff):
+${diffBlock}
+
+Return ONLY the commit message, no other text.`;
+
+  const message = await queryGroq("commitMessage", [{ role: "user", content: prompt }]);
 
   return NextResponse.json({ message });
 }

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual, createHmac } from "node:crypto";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { queryGroq } from "@/lib/groq";
 import { Octokit } from "@octokit/rest";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 const octokit = new Octokit({ auth: process.env.HEALER_TOKEN });
 
 function verifySignature(payload: string, signature: string): boolean {
@@ -62,11 +60,17 @@ export async function POST(req: NextRequest) {
     });
     const diff = commitData.files?.map((f) => f.patch).join("\n") || "";
 
-    const prompt = `A CI run failed on branch ${head_branch}. Logs:\n\`\`\`\n${logSnippet}\n\`\`\`\nDiff that triggered the failure:\n\`\`\`diff\n${diff}\n\`\`\`\nAnalyze the error. If you can propose a fix, output only a JSON array of changed files: [{"file": "path", "content": "new content"}]. If no fix is possible, output {"noop": true}. No other text.`;
+    const prompt = `A CI run failed on branch ${head_branch}. Logs:
+\`\`\`
+${logSnippet}
+\`\`\`
+Diff that triggered the failure:
+\`\`\`diff
+${diff}
+\`\`\`
+Analyze the error. If you can propose a fix, output only a JSON array of changed files: [{"file": "path", "content": "new content"}]. If no fix is possible, output {"noop": true}. No other text.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const text = await queryGroq("ci", [{ role: "user", content: prompt }]);
     const fixData = JSON.parse(text);
 
     if (fixData.noop) {
@@ -105,7 +109,7 @@ export async function POST(req: NextRequest) {
       head: fixBranch,
       base: "main",
       title: `🔥 Automated fix for build failure #${run_id}`,
-      body: `The CI run [${run_id}](${payload.workflow_run.html_url}) failed. Gemini proposed this fix.`,
+      body: `The CI run [${run_id}](${payload.workflow_run.html_url}) failed. Groq proposed this fix.`,
     });
 
     return NextResponse.json({ message: "Fix PR created" });

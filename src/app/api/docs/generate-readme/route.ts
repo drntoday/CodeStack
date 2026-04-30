@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { rateLimit } from "@/lib/rate-limit";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+import { queryGroq } from "@/lib/groq";
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 5 requests per minute (README generation is expensive)
-  if (!rateLimit("docs-readme", 5, 60000)) {
-    return NextResponse.json({ error: "Rate limit exceeded. Please wait a minute." }, { status: 429 });
-  }
-
   const session = await auth();
   if (!session?.accessToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { owner, repo } = await req.json();
   if (!owner || !repo) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
-  // Fetch top-level files: package.json, .env.example, main entry points, README template etc.
+  // Fetch top-level files
   const files = ["package.json", "tsconfig.json", "eslint.config.mjs", "src/app/layout.tsx", "src/app/api/chat/route.ts", "src/auth.ts"];
   let collected = "";
   for (const file of files) {
@@ -41,11 +32,11 @@ export async function POST(req: NextRequest) {
 - Environment variables
 - Usage (how to run, build, deploy)
 - Project structure overview
-Use proper Markdown formatting.\n\n${collected}`;
+Use proper Markdown formatting.
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const readme = response.text();
+${collected}`;
+
+  const readme = await queryGroq("docs", [{ role: "user", content: prompt }]);
 
   return NextResponse.json({ readme });
 }

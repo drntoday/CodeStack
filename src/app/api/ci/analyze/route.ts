@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { rateLimit } from "@/lib/rate-limit";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+import { queryGroq } from "@/lib/groq";
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 10 requests per minute
-  if (!rateLimit("ci-analyze", 10, 60000)) {
-    return NextResponse.json({ error: "Rate limit exceeded. Please wait a minute." }, { status: 429 });
-  }
-
   const session = await auth();
   if (!session?.accessToken)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -50,9 +41,7 @@ Analyze:
 3. Any tips to speed up the CI pipeline (caching, parallelism, etc.)?
 Format your answer in clear bullet points.`;
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const analysis = response.text();
+  const analysis = await queryGroq("ci", [{ role: "user", content: prompt }]);
 
   return NextResponse.json({ analysis });
 }
