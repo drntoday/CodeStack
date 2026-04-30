@@ -28,6 +28,22 @@ export default function Dashboard() {
   const [auditCommit, setAuditCommit] = useState("")
   const [auditReport, setAuditReport] = useState("")
   const [auditing, setAuditing] = useState(false)
+  
+  // Architecture Q&A state
+  const [archQuestion, setArchQuestion] = useState("")
+  const [archAnswer, setArchAnswer] = useState("")
+  const [archLoading, setArchLoading] = useState(false)
+  
+  // Documentation generation state
+  const [generatingReadme, setGeneratingReadme] = useState(false)
+  const [readmeContent, setReadmeContent] = useState("")
+  const [generatingOpenApi, setGeneratingOpenApi] = useState(false)
+  const [openApiContent, setOpenApiContent] = useState("")
+  
+  // Code Search state
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<string[]>([])
+  const [searching, setSearching] = useState(false)
 
   const generateRefactorPlan = async () => {
     if (!owner || !repo || !refactorPrompt) return alert("Load a repo and enter an instruction first.")
@@ -91,6 +107,56 @@ export default function Dashboard() {
     const data = await res.json();
     setAuditReport(data.report || "Error");
     setAuditing(false);
+  };
+
+  const askArchitecture = async () => {
+    if (!owner || !repo || !archQuestion) return;
+    setArchLoading(true);
+    const res = await fetch("/api/architecture/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, question: archQuestion }),
+    });
+    const data = await res.json();
+    setArchAnswer(data.answer || "Error");
+    setArchLoading(false);
+  };
+
+  const generateReadme = async () => {
+    setGeneratingReadme(true);
+    const res = await fetch("/api/docs/generate-readme", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo }),
+    });
+    const data = await res.json();
+    setReadmeContent(data.readme);
+    setGeneratingReadme(false);
+  };
+
+  const generateOpenApi = async () => {
+    setGeneratingOpenApi(true);
+    const res = await fetch("/api/docs/generate-openapi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo }),
+    });
+    const data = await res.json();
+    setOpenApiContent(data.openapi);
+    setGeneratingOpenApi(false);
+  };
+
+  const handleSearch = async () => {
+    if (!owner || !repo || !searchQuery) return;
+    setSearching(true);
+    const res = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, query: searchQuery }),
+    });
+    const data = await res.json();
+    setSearchResults(data.files || []);
+    setSearching(false);
   };
 
   const loadFiles = async () => {
@@ -481,6 +547,96 @@ export default function Dashboard() {
           <pre className="mt-3 whitespace-pre-wrap bg-gray-900 text-green-400 p-3 rounded text-sm">
             {auditReport}
           </pre>
+        )}
+      </div>
+
+      {/* Code Search Section */}
+      <div className="border rounded p-4 mt-6">
+        <h2 className="text-xl font-bold mb-2">Code Search</h2>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="e.g., where is password reset?"
+            className="border p-2 rounded flex-1"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={searching}
+            className="px-4 py-2 bg-green-500 text-white rounded disabled:opacity-50"
+          >
+            {searching ? "Searching…" : "Search"}
+          </button>
+        </div>
+        {searchResults.length > 0 && (
+          <ul className="mt-2 list-disc ml-6">
+            {searchResults.map((f, i) => (
+              <li key={i}>
+                <button
+                  className="text-blue-600 hover:underline text-sm"
+                  onClick={() => selectFile(f)}
+                >
+                  {f}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Architecture Q&A Section */}
+      <div className="border rounded p-4 mt-6">
+        <h2 className="text-xl font-bold mb-2">Architecture Q&A</h2>
+        <input
+          type="text"
+          placeholder="e.g., How does the login flow to the database?"
+          className="border p-2 rounded w-full"
+          value={archQuestion}
+          onChange={(e) => setArchQuestion(e.target.value)}
+        />
+        <button
+          onClick={askArchitecture}
+          disabled={archLoading}
+          className="mt-2 px-4 py-2 bg-teal-500 text-white rounded disabled:opacity-50"
+        >
+          {archLoading ? "Analyzing…" : "Ask"}
+        </button>
+        {archAnswer && (
+          <div className="mt-3 bg-gray-100 p-3 rounded text-sm whitespace-pre-wrap">{archAnswer}</div>
+        )}
+      </div>
+
+      {/* Automatic Documentation Section */}
+      <div className="border rounded p-4 mt-6">
+        <h2 className="text-xl font-bold mb-2">Automatic Documentation</h2>
+        <button
+          onClick={generateReadme}
+          disabled={generatingReadme}
+          className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+        >
+          {generatingReadme ? "Generating…" : "Generate README.md"}
+        </button>
+        <button
+          onClick={generateOpenApi}
+          disabled={generatingOpenApi}
+          className="ml-2 px-4 py-2 bg-indigo-500 text-white rounded disabled:opacity-50"
+        >
+          {generatingOpenApi ? "Generating…" : "Generate OpenAPI Spec"}
+        </button>
+
+        {readmeContent && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-sm">View README.md</summary>
+            <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{readmeContent}</pre>
+          </details>
+        )}
+        {openApiContent && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-sm">View OpenAPI Spec</summary>
+            <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{openApiContent}</pre>
+          </details>
         )}
       </div>
     </div>
