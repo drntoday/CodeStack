@@ -1,10 +1,6 @@
 import Groq from "groq-sdk";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!,
-});
-
-// Model mapping per task type
+// Model mapping per task type (unchanged)
 const MODEL_MAP: Record<string, { primary: string; fallback: string }> = {
   chat: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
   refactor: { primary: "llama-4-scout-17b", fallback: "qwen-qwen-3-32b" },
@@ -17,7 +13,7 @@ const MODEL_MAP: Record<string, { primary: string; fallback: string }> = {
   ci: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
 };
 
-// Simple in‑memory rate‑limit tracker (reset on cold start – acceptable)
+// Simple in‑memory rate‑limit tracker (unchanged)
 const usageCounters: Record<string, number> = {};
 
 export async function queryGroq(
@@ -25,14 +21,21 @@ export async function queryGroq(
   messages: Array<{ role: string; content: string }>,
   options?: { maxTokens?: number; temperature?: number }
 ): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not set");
+  }
+
+  // Groq client is now created inside the function, not at the top level
+  const groq = new Groq({ apiKey });
+
   const models = MODEL_MAP[taskType] || MODEL_MAP.chat;
 
   const tryModel = async (model: string) => {
-    // Basic rate‑limit guard (per‑minute limits not enforced, but we log)
+    // Basic rate‑limit guard
     const key = `${model}-${new Date().getMinutes()}`;
     usageCounters[key] = (usageCounters[key] || 0) + 1;
 
-    // Map messages to Groq format
     const groqMessages = messages.map((m) => ({
       role: m.role as any,
       content: m.content,
@@ -56,6 +59,6 @@ export async function queryGroq(
       console.warn(`Rate limited on ${models.primary}, trying ${models.fallback}`);
       return await tryModel(models.fallback);
     }
-    throw err; // re‑throw other errors
+    throw err;
   }
 }
