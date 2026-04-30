@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     .map((item: any) => item.path);
 
   // Ask Gemini to propose a plan
-  const planPrompt = `You are given a repository with the following file list:\n${files.join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects. Each object must have "file" (the path) and "instruction" (a detailed instruction for what to change in that file). Return ONLY the JSON array. Do not include any other text.`;
+  const planPrompt = `You are given a repository with the following file list:\n${files.join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects. Each object must have "file" (the path), "instruction" (a detailed instruction for what to change in that file), and "reason" (one sentence why this change is needed). Return ONLY the JSON array. Do not include any other text.`;
   const result = await model.generateContent(planPrompt);
   const responseText = (await result.response).text();
 

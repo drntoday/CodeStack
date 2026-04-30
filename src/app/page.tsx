@@ -23,10 +23,10 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-      <h1 className="text-4xl font-bold mb-4">Code Stack Control Panel</h1>
-      <p className="text-gray-400 mb-8 text-center max-w-md">
-        Authenticate with GitHub to chat with Gemini and manage your code stack.
+    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-900 text-white">
+      <h1 className="text-4xl font-bold mb-4">Code Stack</h1>
+      <p className="mb-8 text-lg text-center max-w-xl text-gray-300">
+        Your free AI coding partner – ask questions, refactor entire codebases, generate tests, and automate DevOps, all from the browser.
       </p>
       
       {!session ? (
@@ -42,6 +42,6 @@ export default function Home() {
       ) : (
         <p className="text-green-400">Redirecting to dashboard...</p>
       )}
-    </div>
+    </main>
   )
 }

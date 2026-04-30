@@ -5,6 +5,7 @@ import { useState } from "react"
 
 export default function Dashboard() {
   const { data: session } = useSession()
+  const [activeTab, setActiveTab] = useState("chat")
   const [repoInput, setRepoInput] = useState("")
   const [owner, setOwner] = useState("")
   const [repo, setRepo] = useState("")
@@ -20,7 +21,7 @@ export default function Dashboard() {
   const [prBody, setPrBody] = useState("")
   const [committing, setCommitting] = useState(false)
   const [refactorPrompt, setRefactorPrompt] = useState("")
-  const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string }[] | null>(null)
+  const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string; reason: string; enabled: boolean }[] | null>(null)
   const [refactorLoading, setRefactorLoading] = useState(false)
   const [refactorMessage, setRefactorMessage] = useState("")
   const [generatingTests, setGeneratingTests] = useState(false)
@@ -60,6 +61,10 @@ export default function Dashboard() {
   const [toolResult, setToolResult] = useState("")
   const [toolRunning, setToolRunning] = useState(false)
 
+  // Deployment trigger state
+  const [deploying, setDeploying] = useState(false)
+  const [deployMessage, setDeployMessage] = useState("")
+
   const generateRefactorPlan = async () => {
     if (!owner || !repo || !refactorPrompt) return alert("Load a repo and enter an instruction first.")
     setRefactorLoading(true)
@@ -71,7 +76,7 @@ export default function Dashboard() {
     })
     const data = await res.json()
     if (data.plan) {
-      setRefactorPlan(data.plan)
+      setRefactorPlan(data.plan.map((step: any) => ({ ...step, enabled: true })))
     } else {
       alert("Failed to generate plan: " + (data.error || data.raw))
     }
@@ -82,10 +87,11 @@ export default function Dashboard() {
     if (!owner || !repo || !refactorPlan) return
     setRefactorLoading(true)
     setRefactorMessage("")
+    const planToExecute = refactorPlan.filter(s => s.enabled).map(({ file, instruction }) => ({ file, instruction }))
     const res = await fetch("/api/refactor/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ owner, repo, plan: refactorPlan }),
+      body: JSON.stringify({ owner, repo, plan: planToExecute }),
     })
     const data = await res.json()
     if (data.success) {
@@ -406,6 +412,7 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* Repo loader – common across all tabs */}
       <div className="mb-4 flex gap-2">
         <input
           type="text"
@@ -414,372 +421,431 @@ export default function Dashboard() {
           value={repoInput}
           onChange={(e) => setRepoInput(e.target.value)}
         />
-        <button onClick={loadFiles} className="px-4 py-2 bg-blue-500 text-white rounded">
-          Load Repo
-        </button>
-      </div>
-
-      {files.length > 0 && (
-        <div className="flex gap-4 mb-4">
+        <button onClick={loadFiles} className="px-4 py-2 bg-blue-500 text-white rounded">Load Repo</button>
+        {files.length > 0 && (
           <select
             className="border p-2 rounded w-64"
             value={selectedFile}
             onChange={(e) => selectFile(e.target.value)}
           >
             <option value="">Select a file</option>
-            {files.map((f) => (
-              <option key={f} value={f}>{f}</option>
-            ))}
+            {files.map((f) => (<option key={f} value={f}>{f}</option>))}
           </select>
-          {selectedFile && <span className="text-sm self-center">Loaded: {selectedFile}</span>}
-        </div>
-      )}
+        )}
+      </div>
 
-      {selectedFile && (
-        <div className="flex gap-2 mb-4">
+      {/* Tab navigation */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {["chat", "refactor", "testing", "onboarding", "workflow"].map(tab => (
           <button
-            onClick={handleGenerateTests}
-            disabled={generatingTests}
-            className="px-4 py-2 bg-teal-500 text-white rounded disabled:opacity-50"
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 rounded capitalize ${activeTab === tab ? "bg-blue-500 text-white" : "bg-gray-200"}`}
           >
-            {generatingTests ? "Generating…" : "Generate Tests"}
+            {tab === "chat" ? "Chat & Editor" : tab === "onboarding" ? "Onboard & Docs" : tab}
           </button>
-          {generatedTest && (
-            <button
-              onClick={() => {
-                setPendingChange(generatedTest);
-                setCommitMessage(`Add tests for ${selectedFile}`);
-              }}
-              className="px-4 py-2 bg-orange-500 text-white rounded"
-            >
-              Apply as new test file
-            </button>
-          )}
-        </div>
-      )}
-      
-      {generatedTest && (
-        <details className="mb-4">
-          <summary className="cursor-pointer text-sm font-semibold">View generated test</summary>
-          <pre className="whitespace-pre-wrap text-xs bg-gray-100 p-2 rounded max-h-40 overflow-auto">
-            {generatedTest}
-          </pre>
-        </details>
-      )}
-
-      {/* Chat area */}
-      <div className="border rounded h-64 overflow-y-scroll p-4 mb-4 bg-gray-50">
-        {messages.map((m, i) => (
-          <div key={i} className={`mb-2 ${m.role === "user" ? "text-right" : "text-left"}`}>
-            <span className={`inline-block p-2 rounded max-w-[80%] whitespace-pre-wrap ${m.role === "user" ? "bg-blue-100" : "bg-green-100"}`}>
-              {m.content}
-            </span>
-          </div>
         ))}
-        {loading && <div className="text-center">Thinking...</div>}
       </div>
 
-      <div className="flex gap-2 mb-4">
-        <input
-          type="text"
-          className="border p-2 rounded flex-1"
-          placeholder="Ask something or request an edit..."
-          value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-        />
-        <button onClick={sendMessage} className="px-4 py-2 bg-green-500 text-white rounded">
-          Send
-        </button>
-      </div>
+      {/* Render the active tab */}
+      {activeTab === "chat" && (
+        <div className="space-y-4">
+          {selectedFile && (
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={handleGenerateTests}
+                disabled={generatingTests}
+                className="px-4 py-2 bg-teal-500 text-white rounded disabled:opacity-50"
+              >
+                {generatingTests ? "Generating…" : "Generate Tests"}
+              </button>
+              {generatedTest && (
+                <button
+                  onClick={() => {
+                    setPendingChange(generatedTest);
+                    setCommitMessage(`Add tests for ${selectedFile}`);
+                  }}
+                  className="px-4 py-2 bg-orange-500 text-white rounded"
+                >
+                  Apply as new test file
+                </button>
+              )}
+            </div>
+          )}
+          
+          {generatedTest && (
+            <details className="mb-4">
+              <summary className="cursor-pointer text-sm font-semibold">View generated test</summary>
+              <pre className="whitespace-pre-wrap text-xs bg-gray-100 p-2 rounded max-h-40 overflow-auto">
+                {generatedTest}
+              </pre>
+            </details>
+          )}
 
-      {/* Pending change preview */}
-      {pendingChange && selectedFile && (
-        <div className="border rounded p-4 mb-4 bg-yellow-50">
-          <h2 className="font-semibold mb-2">Proposed change to {selectedFile}</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs font-mono bg-gray-200 p-2 rounded">Current</div>
-              <pre className="whitespace-pre-wrap text-xs bg-gray-100 p-2 rounded max-h-40 overflow-auto">{fileContent}</pre>
-            </div>
-            <div>
-              <div className="text-xs font-mono bg-green-200 p-2 rounded">New</div>
-              <pre className="whitespace-pre-wrap text-xs bg-green-50 p-2 rounded max-h-40 overflow-auto">{pendingChange}</pre>
-            </div>
+          {/* Chat area */}
+          <div className="border rounded h-64 overflow-y-scroll p-4 mb-4 bg-gray-50">
+            {messages.map((m, i) => (
+              <div key={i} className={`mb-2 ${m.role === "user" ? "text-right" : "text-left"}`}>
+                <span className={`inline-block p-2 rounded max-w-[80%] whitespace-pre-wrap ${m.role === "user" ? "bg-blue-100" : "bg-green-100"}`}>
+                  {m.content}
+                </span>
+              </div>
+            ))}
+            {loading && <div className="text-center">Thinking...</div>}
           </div>
 
-          <div className="mt-4 space-y-2">
-            <div className="flex gap-2 items-center">
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              className="border p-2 rounded flex-1"
+              placeholder="Ask something or request an edit..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            />
+            <button onClick={sendMessage} className="px-4 py-2 bg-green-500 text-white rounded">
+              Send
+            </button>
+          </div>
+
+          {/* Pending change preview */}
+          {pendingChange && selectedFile && (
+            <div className="border rounded p-4 mb-4 bg-yellow-50">
+              <h2 className="font-semibold mb-2">Proposed change to {selectedFile}</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs font-mono bg-gray-200 p-2 rounded">Current</div>
+                  <pre className="whitespace-pre-wrap text-xs bg-gray-100 p-2 rounded max-h-40 overflow-auto">{fileContent}</pre>
+                </div>
+                <div>
+                  <div className="text-xs font-mono bg-green-200 p-2 rounded">New</div>
+                  <pre className="whitespace-pre-wrap text-xs bg-green-50 p-2 rounded max-h-40 overflow-auto">{pendingChange}</pre>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    placeholder="Commit message"
+                    className="border p-2 rounded flex-1"
+                    value={commitMessage}
+                    onChange={(e) => setCommitMessage(e.target.value)}
+                  />
+                  <button
+                    onClick={suggestCommitMessage}
+                    disabled={suggestingMessage || !pendingChange}
+                    className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+                  >
+                    {suggestingMessage ? "Thinking…" : "✨ AI generate"}
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={commitDirectly}
+                    disabled={committing}
+                    className="px-4 py-2 bg-orange-500 text-white rounded disabled:opacity-50"
+                  >
+                    Commit directly to main
+                  </button>
+                  <button
+                    onClick={commitAndPR}
+                    disabled={committing}
+                    className="px-4 py-2 bg-purple-500 text-white rounded disabled:opacity-50"
+                  >
+                    Create PR
+                  </button>
+                </div>
+                {committing && <span className="text-sm">Working...</span>}
+              </div>
+            </div>
+          )}
+
+          {/* PR details inputs */}
+          {committing && (
+            <div className="space-y-2 mt-2">
               <input
                 type="text"
-                placeholder="Commit message"
-                className="border p-2 rounded flex-1"
-                value={commitMessage}
-                onChange={(e) => setCommitMessage(e.target.value)}
+                placeholder="PR title (if creating PR)"
+                className="border p-2 rounded w-full"
+                value={prTitle}
+                onChange={(e) => setPrTitle(e.target.value)}
               />
-              <button
-                onClick={suggestCommitMessage}
-                disabled={suggestingMessage || !pendingChange}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
-              >
-                {suggestingMessage ? "Thinking…" : "✨ AI generate"}
-              </button>
+              <textarea
+                placeholder="PR description"
+                className="border p-2 rounded w-full"
+                value={prBody}
+                onChange={(e) => setPrBody(e.target.value)}
+              />
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={commitDirectly}
-                disabled={committing}
-                className="px-4 py-2 bg-orange-500 text-white rounded disabled:opacity-50"
-              >
-                Commit directly to main
-              </button>
-              <button
-                onClick={commitAndPR}
-                disabled={committing}
-                className="px-4 py-2 bg-purple-500 text-white rounded disabled:opacity-50"
-              >
-                Create PR
-              </button>
-            </div>
-            {committing && <span className="text-sm">Working...</span>}
-          </div>
-        </div>
-      )}
-
-      {/* PR details inputs (visible only when PR button is clicked, but we can keep it simple) */}
-      {committing && (
-        <div className="space-y-2 mt-2">
-          <input
-            type="text"
-            placeholder="PR title (if creating PR)"
-            className="border p-2 rounded w-full"
-            value={prTitle}
-            onChange={(e) => setPrTitle(e.target.value)}
-          />
-          <textarea
-            placeholder="PR description"
-            className="border p-2 rounded w-full"
-            value={prBody}
-            onChange={(e) => setPrBody(e.target.value)}
-          />
-        </div>
-      )}
-
-      {/* Refactor Panel */}
-      <div className="border rounded p-4 mt-6 bg-white">
-        <h2 className="text-xl font-bold mb-2">Mass Refactoring</h2>
-        <p className="text-sm text-gray-600 mb-2">
-          Describe a high‑level change (e.g., "Add JSDoc comments to all functions in /src").
-        </p>
-        <textarea
-          className="border p-2 rounded w-full h-24"
-          placeholder="Refactor instruction..."
-          value={refactorPrompt}
-          onChange={(e) => setRefactorPrompt(e.target.value)}
-        />
-        <button
-          onClick={generateRefactorPlan}
-          disabled={refactorLoading}
-          className="mt-2 px-4 py-2 bg-indigo-500 text-white rounded disabled:opacity-50"
-        >
-          Generate Plan
-        </button>
-
-        {refactorPlan && (
-          <div className="mt-4">
-            <h3 className="font-semibold">Proposed Plan (edit if needed):</h3>
-            <ul className="list-disc ml-6 my-2 text-sm">
-              {refactorPlan.map((step, i) => (
-                <li key={i}>
-                  <strong>{step.file}</strong>: {step.instruction}
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={executeRefactor}
-              disabled={refactorLoading}
-              className="px-4 py-2 bg-purple-600 text-white rounded disabled:opacity-50"
-            >
-              Execute Refactor (via GitHub Action)
-            </button>
-          </div>
-        )}
-        {refactorMessage && <p className="mt-2 text-sm">{refactorMessage}</p>}
-      </div>
-
-      {/* Security Audit Section */}
-      <div className="border rounded p-4 mt-6">
-        <h2 className="text-xl font-bold mb-2">Security Audit</h2>
-        <input
-          type="text"
-          placeholder="Commit SHA"
-          className="border p-2 rounded w-64"
-          value={auditCommit}
-          onChange={(e) => setAuditCommit(e.target.value)}
-        />
-        <button
-          onClick={handleAudit}
-          disabled={auditing}
-          className="ml-2 px-4 py-2 bg-red-500 text-white rounded disabled:opacity-50"
-        >
-          {auditing ? "Scanning…" : "Audit Commit"}
-        </button>
-        {auditReport && (
-          <pre className="mt-3 whitespace-pre-wrap bg-gray-900 text-green-400 p-3 rounded text-sm">
-            {auditReport}
-          </pre>
-        )}
-      </div>
-
-      {/* Code Search Section */}
-      <div className="border rounded p-4 mt-6">
-        <h2 className="text-xl font-bold mb-2">Code Search</h2>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="e.g., where is password reset?"
-            className="border p-2 rounded flex-1"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          />
-          <button
-            onClick={handleSearch}
-            disabled={searching}
-            className="px-4 py-2 bg-green-500 text-white rounded disabled:opacity-50"
-          >
-            {searching ? "Searching…" : "Search"}
-          </button>
-        </div>
-        {searchResults.length > 0 && (
-          <ul className="mt-2 list-disc ml-6">
-            {searchResults.map((f, i) => (
-              <li key={i}>
-                <button
-                  className="text-blue-600 hover:underline text-sm"
-                  onClick={() => selectFile(f)}
-                >
-                  {f}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Architecture Q&A Section */}
-      <div className="border rounded p-4 mt-6">
-        <h2 className="text-xl font-bold mb-2">Architecture Q&A</h2>
-        <input
-          type="text"
-          placeholder="e.g., How does the login flow to the database?"
-          className="border p-2 rounded w-full"
-          value={archQuestion}
-          onChange={(e) => setArchQuestion(e.target.value)}
-        />
-        <button
-          onClick={askArchitecture}
-          disabled={archLoading}
-          className="mt-2 px-4 py-2 bg-teal-500 text-white rounded disabled:opacity-50"
-        >
-          {archLoading ? "Analyzing…" : "Ask"}
-        </button>
-        {archAnswer && (
-          <div className="mt-3 bg-gray-100 p-3 rounded text-sm whitespace-pre-wrap">{archAnswer}</div>
-        )}
-      </div>
-
-      {/* Automatic Documentation Section */}
-      <div className="border rounded p-4 mt-6">
-        <h2 className="text-xl font-bold mb-2">Automatic Documentation</h2>
-        <button
-          onClick={generateReadme}
-          disabled={generatingReadme}
-          className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-        >
-          {generatingReadme ? "Generating…" : "Generate README.md"}
-        </button>
-        <button
-          onClick={generateOpenApi}
-          disabled={generatingOpenApi}
-          className="ml-2 px-4 py-2 bg-indigo-500 text-white rounded disabled:opacity-50"
-        >
-          {generatingOpenApi ? "Generating…" : "Generate OpenAPI Spec"}
-        </button>
-
-        {readmeContent && (
-          <details className="mt-2">
-            <summary className="cursor-pointer text-sm">View README.md</summary>
-            <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{readmeContent}</pre>
-          </details>
-        )}
-        {openApiContent && (
-          <details className="mt-2">
-            <summary className="cursor-pointer text-sm">View OpenAPI Spec</summary>
-            <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{openApiContent}</pre>
-          </details>
-        )}
-      </div>
-
-      {/* CI/CD Assistant Section */}
-      <div className="border rounded p-4 mt-6">
-        <h2 className="text-xl font-bold mb-2">CI/CD Assistant</h2>
-        <p className="text-sm mb-2">Paste a failed workflow run ID (find it in the Actions tab).</p>
-        <input
-          type="text"
-          placeholder="e.g., 1234567890"
-          className="border p-2 rounded w-64"
-          value={ciRunId}
-          onChange={(e) => setCiRunId(e.target.value)}
-        />
-        <button
-          onClick={analyzeCICD}
-          disabled={ciLoading}
-          className="ml-2 px-4 py-2 bg-yellow-500 text-white rounded disabled:opacity-50"
-        >
-          {ciLoading ? "Analyzing…" : "Analyze failure"}
-        </button>
-        {ciAnalysis && (
-          <pre className="mt-3 bg-gray-100 p-3 rounded text-sm whitespace-pre-wrap">{ciAnalysis}</pre>
-        )}
-      </div>
-
-      {/* Tool Integration Section */}
-      <div className="border rounded p-4 mt-6">
-        <h2 className="text-xl font-bold mb-2">Tool Integration</h2>
-        <div className="space-y-2">
-          <input
-            type="text"
-            placeholder="Tool name (e.g., Slack)"
-            className="border p-2 rounded w-full"
-            value={toolName}
-            onChange={(e) => setToolName(e.target.value)}
-          />
-          <input
-            type="text"
-            placeholder="Webhook URL"
-            className="border p-2 rounded w-full"
-            value={toolUrl}
-            onChange={(e) => setToolUrl(e.target.value)}
-          />
-          <textarea
-            placeholder='Payload JSON (use {"text": "Hello"})'
-            className="border p-2 rounded w-full h-20"
-            value={toolPayload}
-            onChange={(e) => setToolPayload(e.target.value)}
-          />
-          <button
-            onClick={triggerTool}
-            disabled={toolRunning}
-            className="px-4 py-2 bg-gray-700 text-white rounded disabled:opacity-50"
-          >
-            {toolRunning ? "Triggering…" : "Trigger Tool"}
-          </button>
-          {toolResult && (
-            <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-28">{toolResult}</pre>
           )}
         </div>
-      </div>
+      )}
+
+      {activeTab === "refactor" && (
+        <div className="border rounded p-4 mt-6 bg-white">
+          <h2 className="text-xl font-bold mb-2">Mass Refactoring</h2>
+          <p className="text-sm text-gray-600 mb-2">
+            Describe a high‑level change (e.g., "Add JSDoc comments to all functions in /src").
+          </p>
+          <textarea
+            className="border p-2 rounded w-full h-24"
+            placeholder="Refactor instruction..."
+            value={refactorPrompt}
+            onChange={(e) => setRefactorPrompt(e.target.value)}
+          />
+          <button
+            onClick={generateRefactorPlan}
+            disabled={refactorLoading}
+            className="mt-2 px-4 py-2 bg-indigo-500 text-white rounded disabled:opacity-50"
+          >
+            Generate Plan
+          </button>
+
+          {refactorPlan && (
+            <div className="mt-4">
+              <h3 className="font-semibold">Proposed Plan (toggle steps to enable/disable):</h3>
+              <ul className="list-none my-2 text-sm space-y-2">
+                {refactorPlan.map((step, i) => (
+                  <li key={i} className="flex items-start gap-2 border p-2 rounded">
+                    <input
+                      type="checkbox"
+                      checked={step.enabled}
+                      onChange={() => {
+                        setRefactorPlan(prev => prev ? prev.map((s, idx) => idx === i ? { ...s, enabled: !s.enabled } : s) : null);
+                      }}
+                      className="mt-1"
+                    />
+                    <div>
+                      <strong>{step.file}</strong>: {step.instruction}
+                      <div className="text-xs text-gray-500">{step.reason}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={executeRefactor}
+                disabled={refactorLoading}
+                className="px-4 py-2 bg-purple-600 text-white rounded disabled:opacity-50"
+              >
+                Execute Refactor (via GitHub Action)
+              </button>
+            </div>
+          )}
+          {refactorMessage && <p className="mt-2 text-sm">{refactorMessage}</p>}
+        </div>
+      )}
+
+      {activeTab === "testing" && (
+        <div className="space-y-4">
+          {/* Security Audit Section */}
+          <div className="border rounded p-4">
+            <h2 className="text-xl font-bold mb-2">Security Audit</h2>
+            <input
+              type="text"
+              placeholder="Commit SHA"
+              className="border p-2 rounded w-64"
+              value={auditCommit}
+              onChange={(e) => setAuditCommit(e.target.value)}
+            />
+            <button
+              onClick={handleAudit}
+              disabled={auditing}
+              className="ml-2 px-4 py-2 bg-red-500 text-white rounded disabled:opacity-50"
+            >
+              {auditing ? "Scanning…" : "Audit Commit"}
+            </button>
+            {auditReport && (
+              <pre className="mt-3 whitespace-pre-wrap bg-gray-900 text-green-400 p-3 rounded text-sm">
+                {auditReport}
+              </pre>
+            )}
+          </div>
+
+          {/* CI/CD Assistant Section */}
+          <div className="border rounded p-4">
+            <h2 className="text-xl font-bold mb-2">CI/CD Assistant</h2>
+            <p className="text-sm mb-2">Paste a failed workflow run ID (find it in the Actions tab).</p>
+            <input
+              type="text"
+              placeholder="e.g., 1234567890"
+              className="border p-2 rounded w-64"
+              value={ciRunId}
+              onChange={(e) => setCiRunId(e.target.value)}
+            />
+            <button
+              onClick={analyzeCICD}
+              disabled={ciLoading}
+              className="ml-2 px-4 py-2 bg-yellow-500 text-white rounded disabled:opacity-50"
+            >
+              {ciLoading ? "Analyzing…" : "Analyze failure"}
+            </button>
+            {ciAnalysis && (
+              <pre className="mt-3 bg-gray-100 p-3 rounded text-sm whitespace-pre-wrap">{ciAnalysis}</pre>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "onboarding" && (
+        <div className="space-y-4">
+          {/* Code Search Section */}
+          <div className="border rounded p-4">
+            <h2 className="text-xl font-bold mb-2">Code Search</h2>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="e.g., where is password reset?"
+                className="border p-2 rounded flex-1"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              />
+              <button
+                onClick={handleSearch}
+                disabled={searching}
+                className="px-4 py-2 bg-green-500 text-white rounded disabled:opacity-50"
+              >
+                {searching ? "Searching…" : "Search"}
+              </button>
+            </div>
+            {searchResults.length > 0 && (
+              <ul className="mt-2 list-disc ml-6">
+                {searchResults.map((f, i) => (
+                  <li key={i}>
+                    <button
+                      className="text-blue-600 hover:underline text-sm"
+                      onClick={() => selectFile(f)}
+                    >
+                      {f}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Architecture Q&A Section */}
+          <div className="border rounded p-4">
+            <h2 className="text-xl font-bold mb-2">Architecture Q&A</h2>
+            <input
+              type="text"
+              placeholder="e.g., How does the login flow to the database?"
+              className="border p-2 rounded w-full"
+              value={archQuestion}
+              onChange={(e) => setArchQuestion(e.target.value)}
+            />
+            <button
+              onClick={askArchitecture}
+              disabled={archLoading}
+              className="mt-2 px-4 py-2 bg-teal-500 text-white rounded disabled:opacity-50"
+            >
+              {archLoading ? "Analyzing…" : "Ask"}
+            </button>
+            {archAnswer && (
+              <div className="mt-3 bg-gray-100 p-3 rounded text-sm whitespace-pre-wrap">{archAnswer}</div>
+            )}
+          </div>
+
+          {/* Automatic Documentation Section */}
+          <div className="border rounded p-4">
+            <h2 className="text-xl font-bold mb-2">Automatic Documentation</h2>
+            <button
+              onClick={generateReadme}
+              disabled={generatingReadme}
+              className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+            >
+              {generatingReadme ? "Generating…" : "Generate README.md"}
+            </button>
+            <button
+              onClick={generateOpenApi}
+              disabled={generatingOpenApi}
+              className="ml-2 px-4 py-2 bg-indigo-500 text-white rounded disabled:opacity-50"
+            >
+              {generatingOpenApi ? "Generating…" : "Generate OpenAPI Spec"}
+            </button>
+
+            {readmeContent && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm">View README.md</summary>
+                <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{readmeContent}</pre>
+              </details>
+            )}
+            {openApiContent && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm">View OpenAPI Spec</summary>
+                <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{openApiContent}</pre>
+              </details>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "workflow" && (
+        <div className="space-y-4">
+          {/* Tool Integration Section */}
+          <div className="border rounded p-4">
+            <h2 className="text-xl font-bold mb-2">Tool Integration</h2>
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Tool name (e.g., Slack)"
+                className="border p-2 rounded w-full"
+                value={toolName}
+                onChange={(e) => setToolName(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Webhook URL"
+                className="border p-2 rounded w-full"
+                value={toolUrl}
+                onChange={(e) => setToolUrl(e.target.value)}
+              />
+              <textarea
+                placeholder='Payload JSON (use {"text": "Hello"})'
+                className="border p-2 rounded w-full h-20"
+                value={toolPayload}
+                onChange={(e) => setToolPayload(e.target.value)}
+              />
+              <button
+                onClick={triggerTool}
+                disabled={toolRunning}
+                className="px-4 py-2 bg-gray-700 text-white rounded disabled:opacity-50"
+              >
+                {toolRunning ? "Triggering…" : "Trigger Tool"}
+              </button>
+              {toolResult && (
+                <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-28">{toolResult}</pre>
+              )}
+            </div>
+          </div>
+
+          {/* Deployment Trigger Section */}
+          <div className="border rounded p-4 mt-4">
+            <h3 className="font-semibold mb-2">Deployment Trigger</h3>
+            <button
+              onClick={async () => {
+                if (!owner || !repo) return;
+                setDeploying(true);
+                const res = await fetch("/api/deploy/trigger", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ owner, repo }),
+                });
+                const data = await res.json();
+                setDeployMessage(data.success ? "Deployment triggered!" : "Failed: " + JSON.stringify(data));
+                setDeploying(false);
+              }}
+              disabled={deploying}
+              className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+            >
+              {deploying ? "Triggering..." : "Deploy from main"}
+            </button>
+            <p className="text-xs mt-1">Triggers the `deploy.yml` workflow in your repo.</p>
+            {deployMessage && <p className="text-sm mt-2">{deployMessage}</p>}
+          </div>
+        </div>
+      )}
     </div>
-  )
+  );
 }
