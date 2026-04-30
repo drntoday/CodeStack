@@ -45,6 +45,21 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState<string[]>([])
   const [searching, setSearching] = useState(false)
 
+  // Natural Language Git - AI commit message suggestion
+  const [suggestingMessage, setSuggestingMessage] = useState(false)
+
+  // CI/CD Optimization state
+  const [ciRunId, setCiRunId] = useState("")
+  const [ciAnalysis, setCiAnalysis] = useState("")
+  const [ciLoading, setCiLoading] = useState(false)
+
+  // Tool Integration (Custom Webhooks) state
+  const [toolName, setToolName] = useState("")
+  const [toolUrl, setToolUrl] = useState("")
+  const [toolPayload, setToolPayload] = useState("{}")
+  const [toolResult, setToolResult] = useState("")
+  const [toolRunning, setToolRunning] = useState(false)
+
   const generateRefactorPlan = async () => {
     if (!owner || !repo || !refactorPrompt) return alert("Load a repo and enter an instruction first.")
     setRefactorLoading(true)
@@ -157,6 +172,63 @@ export default function Dashboard() {
     const data = await res.json();
     setSearchResults(data.files || []);
     setSearching(false);
+  };
+
+  // Natural Language Git - AI commit message suggestion
+  const suggestCommitMessage = async () => {
+    if (!pendingChange) return;
+    setSuggestingMessage(true);
+    const res = await fetch("/api/git/commit-message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        oldContent: fileContent,
+        newContent: pendingChange,
+        filePath: selectedFile,
+        description: chatInput,
+      }),
+    });
+    const data = await res.json();
+    if (data.message) {
+      setCommitMessage(data.message);
+    }
+    setSuggestingMessage(false);
+  };
+
+  // CI/CD Optimization - analyze failed pipeline
+  const analyzeCICD = async () => {
+    if (!owner || !repo || !ciRunId) return;
+    setCiLoading(true);
+    const res = await fetch("/api/ci/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, runId: ciRunId }),
+    });
+    const data = await res.json();
+    setCiAnalysis(data.analysis || "Error");
+    setCiLoading(false);
+  };
+
+  // Tool Integration - trigger custom webhook
+  const triggerTool = async () => {
+    if (!toolUrl) return;
+    setToolRunning(true);
+    let payload;
+    try {
+      payload = JSON.parse(toolPayload);
+    } catch {
+      alert("Invalid JSON payload");
+      setToolRunning(false);
+      return;
+    }
+    const res = await fetch("/api/tools/trigger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: toolUrl, payload }),
+    });
+    const data = await res.json();
+    setToolResult(JSON.stringify(data, null, 2));
+    setToolRunning(false);
   };
 
   const loadFiles = async () => {
@@ -437,13 +509,22 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-4 space-y-2">
-            <input
-              type="text"
-              placeholder="Commit message"
-              className="border p-2 rounded w-full"
-              value={commitMessage}
-              onChange={(e) => setCommitMessage(e.target.value)}
-            />
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                placeholder="Commit message"
+                className="border p-2 rounded flex-1"
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+              />
+              <button
+                onClick={suggestCommitMessage}
+                disabled={suggestingMessage || !pendingChange}
+                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+              >
+                {suggestingMessage ? "Thinking…" : "✨ AI generate"}
+              </button>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={commitDirectly}
@@ -638,6 +719,66 @@ export default function Dashboard() {
             <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{openApiContent}</pre>
           </details>
         )}
+      </div>
+
+      {/* CI/CD Assistant Section */}
+      <div className="border rounded p-4 mt-6">
+        <h2 className="text-xl font-bold mb-2">CI/CD Assistant</h2>
+        <p className="text-sm mb-2">Paste a failed workflow run ID (find it in the Actions tab).</p>
+        <input
+          type="text"
+          placeholder="e.g., 1234567890"
+          className="border p-2 rounded w-64"
+          value={ciRunId}
+          onChange={(e) => setCiRunId(e.target.value)}
+        />
+        <button
+          onClick={analyzeCICD}
+          disabled={ciLoading}
+          className="ml-2 px-4 py-2 bg-yellow-500 text-white rounded disabled:opacity-50"
+        >
+          {ciLoading ? "Analyzing…" : "Analyze failure"}
+        </button>
+        {ciAnalysis && (
+          <pre className="mt-3 bg-gray-100 p-3 rounded text-sm whitespace-pre-wrap">{ciAnalysis}</pre>
+        )}
+      </div>
+
+      {/* Tool Integration Section */}
+      <div className="border rounded p-4 mt-6">
+        <h2 className="text-xl font-bold mb-2">Tool Integration</h2>
+        <div className="space-y-2">
+          <input
+            type="text"
+            placeholder="Tool name (e.g., Slack)"
+            className="border p-2 rounded w-full"
+            value={toolName}
+            onChange={(e) => setToolName(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Webhook URL"
+            className="border p-2 rounded w-full"
+            value={toolUrl}
+            onChange={(e) => setToolUrl(e.target.value)}
+          />
+          <textarea
+            placeholder='Payload JSON (use {"text": "Hello"})'
+            className="border p-2 rounded w-full h-20"
+            value={toolPayload}
+            onChange={(e) => setToolPayload(e.target.value)}
+          />
+          <button
+            onClick={triggerTool}
+            disabled={toolRunning}
+            className="px-4 py-2 bg-gray-700 text-white rounded disabled:opacity-50"
+          >
+            {toolRunning ? "Triggering…" : "Trigger Tool"}
+          </button>
+          {toolResult && (
+            <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-28">{toolResult}</pre>
+          )}
+        </div>
       </div>
     </div>
   )
