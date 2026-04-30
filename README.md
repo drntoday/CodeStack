@@ -26,8 +26,8 @@ cp .env.local.example .env.local
 
 Then edit `.env.local`:
 
-- `GITHUB_CLIENT_ID` - Create an OAuth App at https://github.com/settings/developers
-- `GITHUB_CLIENT_SECRET` - From your GitHub OAuth App
+- `CODESTACK_CLIENT_ID` - Create an OAuth App at https://github.com/settings/developers
+- `CODESTACK_CLIENT_SECRET` - From your GitHub OAuth App
 - `GEMINI_API_KEY` - Get from https://aistudio.google.com/app/apikey
 - `NEXTAUTH_SECRET` - Generate with `openssl rand -base64 32`
 - `NEXTAUTH_URL` - Your app URL (use `http://localhost:3000` for local dev)
@@ -46,8 +46,8 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 1. Push this repo to GitHub
 2. Import the project on Vercel
 3. Add environment variables in Vercel settings:
-   - `GITHUB_CLIENT_ID`
-   - `GITHUB_CLIENT_SECRET`
+   - `CODESTACK_CLIENT_ID`
+   - `CODESTACK_CLIENT_SECRET`
    - `GEMINI_API_KEY`
    - `NEXTAUTH_SECRET`
 4. Set the callback URL in your GitHub OAuth App to `https://your-app.vercel.app/api/auth/callback/github`
