@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "crypto";
+import { timingSafeEqual, createHmac } from "node:crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Octokit } from "@octokit/rest";
 
@@ -9,12 +9,11 @@ const octokit = new Octokit({ auth: process.env.HEALER_TOKEN });
 
 function verifySignature(payload: string, signature: string): boolean {
   const secret = process.env.WEBHOOK_SECRET!;
-  if (!secret) return false;
   const hmac = createHmac("sha256", secret);
   hmac.update(payload);
   const digest = "sha256=" + hmac.digest("hex");
   try {
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
   } catch {
     return false;
   }
