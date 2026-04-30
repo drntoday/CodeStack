@@ -1,0 +1,50 @@
+name: AI Refactor
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan:
+        description: 'JSON plan of files and instructions'
+        required: true
+      owner:
+        description: 'Repo owner'
+        required: true
+      repo:
+        description: 'Repo name'
+        required: true
+      base_branch:
+        description: 'Base branch'
+        default: 'main'
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.base_branch }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install @google/generative-ai
+
+      - name: Run refactor script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node scripts/refactor.js '${{ github.event.inputs.plan }}'
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="refactor-$(date +%s)"
+          git checkout -b $BRANCH
+          git add -A
+          git commit -m "AI Refactor" || echo "No changes"
+          git push origin $BRANCH
+          gh pr create --base ${{ github.event.inputs.base_branch }} --head $BRANCH \
+            --title "AI Refactor" --body "Automated refactoring based on plan."

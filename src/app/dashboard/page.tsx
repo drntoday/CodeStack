@@ -19,6 +19,47 @@ export default function Dashboard() {
   const [prTitle, setPrTitle] = useState("")
   const [prBody, setPrBody] = useState("")
   const [committing, setCommitting] = useState(false)
+  const [refactorPrompt, setRefactorPrompt] = useState("")
+  const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string }[] | null>(null)
+  const [refactorLoading, setRefactorLoading] = useState(false)
+  const [refactorMessage, setRefactorMessage] = useState("")
+
+  const generateRefactorPlan = async () => {
+    if (!owner || !repo || !refactorPrompt) return alert("Load a repo and enter an instruction first.")
+    setRefactorLoading(true)
+    setRefactorMessage("")
+    const res = await fetch("/api/refactor/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, prompt: refactorPrompt }),
+    })
+    const data = await res.json()
+    if (data.plan) {
+      setRefactorPlan(data.plan)
+    } else {
+      alert("Failed to generate plan: " + (data.error || data.raw))
+    }
+    setRefactorLoading(false)
+  }
+
+  const executeRefactor = async () => {
+    if (!owner || !repo || !refactorPlan) return
+    setRefactorLoading(true)
+    setRefactorMessage("")
+    const res = await fetch("/api/refactor/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, repo, plan: refactorPlan }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      setRefactorMessage("Refactor workflow started! Check GitHub Actions for progress and the resulting PR.")
+      setRefactorPlan(null)
+    } else {
+      setRefactorMessage("Error: " + (data.error || "Unknown"))
+    }
+    setRefactorLoading(false)
+  }
 
   const loadFiles = async () => {
     if (!repoInput.includes("/")) return alert("Enter owner/repo")
@@ -312,6 +353,48 @@ export default function Dashboard() {
           />
         </div>
       )}
+
+      {/* Refactor Panel */}
+      <div className="border rounded p-4 mt-6 bg-white">
+        <h2 className="text-xl font-bold mb-2">Mass Refactoring</h2>
+        <p className="text-sm text-gray-600 mb-2">
+          Describe a high‑level change (e.g., "Add JSDoc comments to all functions in /src").
+        </p>
+        <textarea
+          className="border p-2 rounded w-full h-24"
+          placeholder="Refactor instruction..."
+          value={refactorPrompt}
+          onChange={(e) => setRefactorPrompt(e.target.value)}
+        />
+        <button
+          onClick={generateRefactorPlan}
+          disabled={refactorLoading}
+          className="mt-2 px-4 py-2 bg-indigo-500 text-white rounded disabled:opacity-50"
+        >
+          Generate Plan
+        </button>
+
+        {refactorPlan && (
+          <div className="mt-4">
+            <h3 className="font-semibold">Proposed Plan (edit if needed):</h3>
+            <ul className="list-disc ml-6 my-2 text-sm">
+              {refactorPlan.map((step, i) => (
+                <li key={i}>
+                  <strong>{step.file}</strong>: {step.instruction}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={executeRefactor}
+              disabled={refactorLoading}
+              className="px-4 py-2 bg-purple-600 text-white rounded disabled:opacity-50"
+            >
+              Execute Refactor (via GitHub Action)
+            </button>
+          </div>
+        )}
+        {refactorMessage && <p className="mt-2 text-sm">{refactorMessage}</p>}
+      </div>
     </div>
   )
 }
