@@ -1,33 +1,92 @@
-```
 # Dependencies
 node_modules/
 
-# Environment variables
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.local
 .env
 .env.local
-*.env.*
+.env.*
 
 # Build outputs
 dist/
 build/
-.next/
+*.js.map
+*.ts.map
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Logs
 *.log
 
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
 # Temporary files
 *.tmp
-*.swp
+*.temp
+*.bak
 
-# IDE specific
-.vscode/
-.idea/
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-# Python cache
-__pycache__/
-*.pyc
+# Pytest
+.pytest_cache/
 
-# OS generated
-.DS_Store
-Thumbs.db
-```
+# Next.js
+.next/
+out/
+
+# General compiled files
+*.exe
+*.dll
+*.so
+*.a
+*.o
+*.obj
+*.out
+*.class
+*.jar
+*.war
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
