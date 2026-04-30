@@ -4,7 +4,7 @@ export async function POST(req: Request) {
   const { task, files, modelInstructions } = await req.json();
 
   // Initialize Octokit with your GitHub PAT (Personal Access Token)
-  const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+  const octokit = new Octokit({ auth: process.env.CODESTACK_PAT });
 
   try {
     // This triggers the 'repository_dispatch' event in GitHub Actions
