@@ -42,7 +42,7 @@ export async function generateRefactorPlan(
       .map((item: any) => item.path);
   }
 
-  const planPrompt = `Repository files:\n${files.join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects with "file", "instruction", and "reason". Only JSON.`;
+  const planPrompt = `Repository files:\n${(files ?? []).join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects with "file", "instruction", and "reason". Only JSON.`;
   const responseText = await queryGroq("refactor", [
     { role: "user", content: planPrompt },
   ]);
