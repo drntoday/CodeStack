@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { rateLimit } from "@/lib/rate-limit";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 export async function POST(req: NextRequest) {
+  // Rate limiting: 5 requests per minute (OpenAPI generation is expensive)
+  if (!rateLimit("docs-openapi", 5, 60000)) {
+    return NextResponse.json({ error: "Rate limit exceeded. Please wait a minute." }, { status: 429 });
+  }
+
   const session = await auth();
   if (!session?.accessToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

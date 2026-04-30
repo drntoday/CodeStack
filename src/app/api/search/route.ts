@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { rateLimit } from "@/lib/rate-limit";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -14,7 +15,11 @@ async function buildIndex(owner: string, repo: string, token: string) {
   const codeFiles = treeData.tree.filter((item: any) => item.type === "blob" && /\.(ts|js|tsx|jsx|py)$/i.test(item.path)).map((item: any) => item.path);
 
   const index: { path: string; summary: string }[] = [];
-  for (const file of codeFiles.slice(0, 200)) { // larger cap, but careful with tokens
+  let totalChars = 0;
+  for (const file of codeFiles.slice(0, 50)) {
+    // Early cutoff: stop after accumulating 3000 chars to avoid timeout
+    if (totalChars > 3000) break;
+    
     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${file}`, {
       headers: { Authorization: `token ${token}` },
     });
@@ -25,12 +30,18 @@ async function buildIndex(owner: string, repo: string, token: string) {
       const lines = content.split("\n");
       const important = lines.filter(line => /^\s*(export\s+)?(async\s+)?function|class\s+\w+|const\s+\w+\s*=\s*(async\s*)?\(/.test(line) || line.trim().startsWith("//") || line.trim().startsWith("/*")).join("\n").slice(0, 600);
       index.push({ path: file, summary: important });
+      totalChars += important.length;
     }
   }
   return index;
 }
 
 export async function POST(req: NextRequest) {
+  // Rate limiting: 5 requests per minute (search is expensive)
+  if (!rateLimit("search", 5, 60000)) {
+    return NextResponse.json({ error: "Rate limit exceeded. Please wait a minute." }, { status: 429 });
+  }
+
   const session = await auth();
   if (!session?.accessToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
