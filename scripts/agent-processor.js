@@ -1,61 +1,69 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require("fs");
 const path = require("path");
+const { execSync } = require("child_process");
 
 async function run() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+  // Using 1.5 Pro for its massive context and superior reasoning
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-pro",
+    generationConfig: { responseMimeType: "application/json" } 
+  });
 
-  // 1. Parse the task sent from Vercel
   const payload = JSON.parse(process.env.TASK_PAYLOAD);
   const { task_description, target_files } = payload;
 
-  console.log(`Starting task: ${task_description}`);
-
-  // 2. Read the content of the target files to give Gemini context
-  let codebaseContext = "";
+  let currentCodeContext = "";
   target_files.forEach(file => {
     if (fs.existsSync(file)) {
-      const content = fs.readFileSync(file, "utf8");
-      codebaseContext += `\n--- FILE: ${file} ---\n${content}\n`;
+      currentCodeContext += `\nFILE: ${file}\nCONTENT:\n${fs.readFileSync(file, "utf8")}\n`;
     }
   });
 
-  // 3. The Prompt: Asking Gemini to return ONLY the updated code
-  const prompt = `
-    You are an expert software engineer. 
-    Task: ${task_description}
+  let task = task_description;
+  let success = false;
+  let attempts = 0;
+
+  while (attempts < 2 && !success) {
+    console.log(`--- Attempt ${attempts + 1} ---`);
     
-    Current Code Context:
-    ${codebaseContext}
-
-    Instructions:
-    Return the updated code for the files. 
-    Format your response as a JSON object where keys are filenames and values are the full updated file content.
-    Example: {"path/to/file.js": "new content here"}
-    DO NOT include markdown formatting like \`\`\`json. Return raw JSON text.
-  `;
-
-  const result = await model.generateContent(prompt);
-  const responseText = result.response.text();
-
-  try {
-    // 4. Parse Gemini's response and write to disk
-    const updates = JSON.parse(responseText.trim());
-    
-    for (const [filePath, newContent] of Object.entries(updates)) {
-      const fullPath = path.resolve(process.cwd(), filePath);
+    const prompt = `
+      You are an elite AI engineer. 
+      TASK: ${task}
+      CONTEXT: ${currentCodeContext}
       
-      // Create directory if it doesn't exist
-      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-      
-      fs.writeFileSync(fullPath, newContent, "utf8");
-      console.log(`Successfully updated: ${filePath}`);
+      Respond with a JSON object where keys are file paths and values are the NEW content.
+      Schema: { "filepath": "content" }
+    `;
+
+    try {
+      const result = await model.generateContent(prompt);
+      const updates = JSON.parse(result.response.text());
+
+      // Apply changes
+      for (const [filePath, content] of Object.entries(updates)) {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, content, "utf8");
+        console.log(`Updated: ${filePath}`);
+      }
+
+      // Self-Healing: Check if the code actually works
+      try {
+        console.log("Running verification...");
+        // This runs 'npm test' or a simple node check
+        execSync("npm test", { stdio: "inherit" });
+        success = true;
+        console.log("✅ Verification successful.");
+      } catch (err) {
+        console.error("❌ Build/Test failed. Asking Gemini to fix it...");
+        task = `The previous attempt failed with this error: ${err.message}. Please fix the code. Original task: ${task_description}`;
+        attempts++;
+      }
+    } catch (error) {
+      console.error("Critical error in Agent Loop:", error);
+      process.exit(1);
     }
-  } catch (e) {
-    console.error("Failed to parse Gemini response. Ensure it returned valid JSON.");
-    console.error("Raw Response:", responseText);
-    process.exit(1);
   }
 }
 
