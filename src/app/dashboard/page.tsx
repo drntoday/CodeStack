@@ -2,7 +2,6 @@
 
 import { useSession, signOut } from "next-auth/react"
 import { useState, useEffect, useRef } from "react"
-import { diffLines } from "diff"
 
 interface Message {
   role: "user" | "assistant" | "system"
@@ -35,9 +34,27 @@ interface PendingChangeWithOriginal extends PendingChange {
 }
 
 
-// Diff preview component using diff library
+// Diff preview component using inline diff helper
+function computeDiff(oldText: string, newText: string): Array<{ type: "same" | "added" | "removed"; text: string }> {
+  const oldLines = oldText.split("\n");
+  const newLines = newText.split("\n");
+  const result: Array<{ type: "same" | "added" | "removed"; text: string }> = [];
+  const maxLen = Math.max(oldLines.length, newLines.length);
+  for (let i = 0; i < maxLen; i++) {
+    const o = oldLines[i] ?? null;
+    const n = newLines[i] ?? null;
+    if (o === n) {
+      if (o !== null) result.push({ type: "same", text: o });
+    } else {
+      if (o !== null) result.push({ type: "removed", text: o });
+      if (n !== null) result.push({ type: "added", text: n });
+    }
+  }
+  return result;
+}
+
 function DiffPreview({ original, modified }: { original: string; modified: string }) {
-  const diffs = diffLines(original, modified);
+  const diffs = computeDiff(original, modified);
   
   return (
     <div className="mt-2 rounded bg-black/30 p-2 font-mono text-xs overflow-x-auto max-h-64 overflow-y-auto">
@@ -45,18 +62,16 @@ function DiffPreview({ original, modified }: { original: string; modified: strin
         <div
           key={idx}
           className={
-            part.added ? "bg-green-900/50 text-green-300" :
-            part.removed ? "bg-red-900/50 text-red-300" :
+            part.type === "added" ? "bg-green-900/50 text-green-300" :
+            part.type === "removed" ? "bg-red-900/50 text-red-300" :
             "text-gray-400"
           }
         >
-          {part.value.split("\n").map((line, lineIdx) => (
-            <div key={lineIdx}>
-              {part.added && <span className="mr-2 text-green-500">+</span>}
-              {part.removed && <span className="mr-2 text-red-500">-</span>}
-              {part.added || part.removed ? line : <span className="opacity-50">{line}</span>}
-            </div>
-          ))}
+          <div>
+            {part.type === "added" && <span className="mr-2 text-green-500">+</span>}
+            {part.type === "removed" && <span className="mr-2 text-red-500">-</span>}
+            {part.type === "added" || part.type === "removed" ? part.text : <span className="opacity-50">{part.text}</span>}
+          </div>
         </div>
       ))}
     </div>
@@ -93,9 +108,6 @@ export default function Dashboard() {
   // Auto-commit mode toggle
   const [autoCommitMode, setAutoCommitMode] = useState(false)
   const [autoCommit, setAutoCommit] = useState(false)
-  
-  // Diff preview state
-  const [showDiffFor, setShowDiffFor] = useState<string | null>(null)
 
   // Ref for auto-scrolling to pending changes
   const pendingChangeRef = useRef<HTMLDivElement>(null)
