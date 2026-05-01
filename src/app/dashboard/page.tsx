@@ -55,6 +55,7 @@ export default function Dashboard() {
   
   // Auto-commit mode toggle
   const [autoCommitMode, setAutoCommitMode] = useState(false)
+  const [autoCommit, setAutoCommit] = useState(false)
 
   // Ref for auto-scrolling to pending changes
   const pendingChangeRef = useRef<HTMLDivElement>(null)
@@ -65,9 +66,17 @@ export default function Dashboard() {
       pendingChangeRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
     }
   }, [pendingChanges])
+  
+  // Auto-commit when autoCommit is enabled and a pendingChange is set
+  useEffect(() => {
+    if (autoCommit && pendingChange) {
+      commitChanges(true);
+    }
+  }, [pendingChange, autoCommit]);
   // Refactor plan state
   const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string; reason: string; enabled?: boolean }[] | null>(null)
   const [executingRefactor, setExecutingRefactor] = useState(false)
+  const [executingDirect, setExecutingDirect] = useState(false)
   const [refactorProgress, setRefactorProgress] = useState<{ current: number; total: number } | null>(null)
   
   // Generated test state
@@ -710,6 +719,17 @@ export default function Dashboard() {
               <span className="text-white/70">Auto-save docs</span>
             </label>
             
+            {/* Auto-PR toggle */}
+            <label className="flex items-center gap-1 text-xs cursor-pointer ml-3">
+              <input
+                type="checkbox"
+                checked={autoCommit}
+                onChange={(e) => setAutoCommit(e.target.checked)}
+                className="rounded"
+              />
+              Auto‑PR
+            </label>
+            
             {/* Repo loader */}
             <div className="flex gap-2">
               <input
@@ -1019,11 +1039,33 @@ export default function Dashboard() {
                               {executingRefactor ? "Executing..." : "✓ Approve & Execute (Workflow)"}
                             </button>
                             <button
-                              onClick={() => executeRefactor("direct")}
-                              disabled={executingRefactor}
+                              onClick={async () => {
+                                if (!repoContext || !refactorPlan) return;
+                                setExecutingDirect(true);
+                                try {
+                                  const planToExecute = refactorPlan.filter(s => s.enabled).map(({ file, instruction }) => ({ file, instruction }));
+                                  const res = await fetch("/api/refactor/execute-direct", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ ...repoContext, plan: planToExecute }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    setMessages(prev => [...prev, { role: "assistant", content: `Direct refactoring complete:\n${data.messages.join("\n")}` }]);
+                                    setRefactorPlan(null);
+                                  } else {
+                                    setMessages(prev => [...prev, { role: "assistant", content: "Direct refactor failed: " + (data.error || "unknown") }]);
+                                  }
+                                } catch (err: any) {
+                                  setMessages(prev => [...prev, { role: "assistant", content: "Error: " + err.message }]);
+                                } finally {
+                                  setExecutingDirect(false);
+                                }
+                              }}
+                              disabled={executingDirect}
                               className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 transition-colors"
                             >
-                              ⚡ Direct Commit (Fallback)
+                              {executingDirect ? "Committing..." : "Execute Directly (no workflow)"}
                             </button>
                           </div>
                         )}

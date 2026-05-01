@@ -104,7 +104,7 @@ export async function executeRefactor(
 }
 
 // Helper function to execute refactoring via direct commits
-async function executeRefactorDirect(
+export async function executeRefactorDirect(
   owner: string,
   repo: string,
   plan: Array<{ file: string; instruction: string }>,
