@@ -1,11 +1,11 @@
-```gitignore
+```
 # Dependencies
 node_modules/
 
 # Build outputs
+.next/
 dist/
 build/
-.next/
 out/
 
 # Environment variables
@@ -13,61 +13,72 @@ out/
 .env.local
 .env.*
 
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-env/
-venv/
+*.so
+*.egg-info/
+.eggs/
 .venv/
+venv/
 pip-log.txt
 pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
 
-# Logs
-logs/
-*.log
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Testing
-coverage/
-htmlcov/
-.pytest_cache/
+# MyPy
 .mypy_cache/
-```
+.dmypy.json
+dmypy.json
 
-Wait, let me reconsider this. Looking at the modified files, they appear to be TypeScript/React files (`route.ts`, `page.tsx`) which suggests this is likely a Next.js project. However, the original rule was that if there are only source/config files with no build artifacts, dependencies, or temp files, I should output nothing.
+# Pytest
+.pytest_cache/
 
-But since this appears to be a Next.js project (based on the file paths), it's reasonable to include common Next.js ignores like `.next/` and `node_modules/`.
+# Temporary files
+*.tmp
+*.temp
+*.bak
 
-Actually, re-reading the input more carefully - there are no build artifacts, dependency directories, or temporary files in the changes. Only source files were modified. According to rule #6, if the change list contains ONLY source or config files and NO build artifacts, dependencies, or temp files, I should output an EMPTY .gitignore.
-
-The files shown are `src/app/api/orchestrator/route.ts` and `src/app/dashboard/page.tsx` - these are source code files.
-
-```gitignore
-
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```

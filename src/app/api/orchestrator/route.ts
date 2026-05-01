@@ -334,6 +334,9 @@ Classify this request and respond with ONLY valid JSON.`;
 
   } catch (error: any) {
     console.error("Orchestrator fatal error:", error);
+    if (error?.status === 429) {
+      return NextResponse.json({ error: "Rate limit exceeded. Please wait a moment.", rateLimited: true }, { status: 429 });
+    }
     return NextResponse.json(
       { error: typeof error === "string" ? error : (error.message || "Internal server error") },
       { status: 500 }

@@ -16,9 +16,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Groq error:", error);
-    return new Response(
-      JSON.stringify({ error: "AI service unavailable." }),
-      { status: 503 }
-    );
+    const message = error?.message || "AI service unavailable.";
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }
