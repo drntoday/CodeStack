@@ -19,6 +19,9 @@ export async function generateChatResponse(
       ? repoContext.files.join("\n")
       : repoContext.files.slice(0, 200).join("\n") + `\n... and ${repoContext.files.length - 200} more files`;
     systemPromptParts.push(`\n\nThe user is working with the repository ${repoContext.owner}/${repoContext.repo} which contains these files:\n${fileListSummary}`);
+  } else if (repoContext?.owner && repoContext?.repo) {
+    // System-level guardrail: No file list available
+    systemPromptParts.push("\n\nYou do NOT have access to the repository's file structure. If the user's question requires knowing the files, tell them to load the repository. Do NOT invent any file names.");
   }
   
   const systemPrompt = {
@@ -37,9 +40,9 @@ export async function generateRefactorPlan(
   accessToken: string,
   files: string[]
 ): Promise<Array<{ file: string; instruction: string; reason: string }>> {
-  // Return error if files list is empty
+  // Return error if files list is empty - do not call LLM
   if (files.length === 0) {
-    throw new Error("The repository contains no files.");
+    throw new Error("No file list available. Do NOT invent any file names. If you cannot answer without the file list, say so clearly.");
   }
 
   // Include up to 200 files in the prompt
@@ -142,9 +145,9 @@ export async function answerArchitecture(
   accessToken: string,
   files: string[]
 ): Promise<string> {
-  // Return error if files list is empty
+  // Return error if files list is empty - do not call LLM
   if (files.length === 0) {
-    return "The repository contains no files.";
+    return "No file list available. Do NOT invent any file names. If you cannot answer without the file list, say so clearly.";
   }
 
   // Include up to 200 files
@@ -164,9 +167,9 @@ export async function generateReadme(
   accessToken: string,
   files: string[]
 ): Promise<string> {
-  // Return error if files list is empty
+  // Return error if files list is empty - do not call LLM
   if (files.length === 0) {
-    return "The repository contains no files.";
+    return "No file list available. Do NOT invent any file names. If you cannot answer without the file list, say so clearly.";
   }
 
   // Include up to 200 files
@@ -185,9 +188,9 @@ export async function generateOpenApi(
   accessToken: string,
   files: string[]
 ): Promise<string> {
-  // Return error if files list is empty
+  // Return error if files list is empty - do not call LLM
   if (files.length === 0) {
-    return "The repository contains no files.";
+    return "No file list available. Do NOT invent any file names. If you cannot answer without the file list, say so clearly.";
   }
 
   // Include up to 200 files
@@ -208,7 +211,7 @@ export async function searchCode(
   accessToken: string,
   files: string[]
 ): Promise<string[]> {
-  // Return error if files list is empty
+  // Return empty array if files list is empty - do not call LLM
   if (files.length === 0) {
     return [];
   }
@@ -249,10 +252,15 @@ export async function generateGreeting(
     ? files.slice(0, 200).join("\n") 
     : "No files found";
 
+  // Add guardrail instruction when no files are available
+  const guardrailInstruction = files.length === 0 
+    ? "\n\nNote: This repository appears to be empty. Do NOT invent any file names or project details. Provide a generic welcome message and suggest the user add code to the repository."
+    : "";
+
   const prompt = `You are Code Stack, an AI-first coding assistant. A user has just loaded the repository ${owner}/${repo}.
   
 The repository contains these files (showing up to 200):
-${fileListSummary}
+${fileListSummary}${guardrailInstruction}
 
 Based on the file structure, provide:
 1. A friendly, concise greeting (1-2 sentences) that identifies the project type (e.g., "I see this is a Next.js project with an auth system")
