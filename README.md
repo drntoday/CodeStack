@@ -53,7 +53,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
    - `AUTH_SECRET`
    - `HEALER_TOKEN` (for self-healing)
    - `WEBHOOK_SECRET` (for webhook validation)
-4. Set the callback URL in your GitHub OAuth App to `https://your-app.vercel.app/api/auth/callback/github`
+4. Set the callback URL in your GitHub OAuth App to `https://code-stack-kappa.vercel.app/api/auth/callback/github`
 
 ## Self-Healing Setup
 
