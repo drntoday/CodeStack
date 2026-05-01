@@ -1,4 +1,4 @@
-```
+```gitignore
 # Dependencies
 node_modules/
 
@@ -11,9 +11,9 @@ out/
 # Environment variables
 .env
 .env.local
-.env.*
+*.env.*
 
-# Python specific
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -23,21 +23,14 @@ env/
 venv/
 .venv/
 pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
+pip-selfcheck.json
+
+# Logs
 *.log
-*.pot
-*.po
-*~
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
+
+# OS generated files
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
@@ -45,14 +38,36 @@ coverage.xml
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
 # Temporary files
 *.tmp
 *.temp
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
