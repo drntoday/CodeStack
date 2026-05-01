@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react"
 import { useState, useEffect, useRef } from "react"
+import { diffLines } from "diff"
 
 interface Message {
   role: "user" | "assistant" | "system"
@@ -28,6 +29,40 @@ interface PendingChange {
   branch: string
 }
 
+// Store original content for diff preview
+interface PendingChangeWithOriginal extends PendingChange {
+  originalContent?: string
+}
+
+
+// Diff preview component using diff library
+function DiffPreview({ original, modified }: { original: string; modified: string }) {
+  const diffs = diffLines(original, modified);
+  
+  return (
+    <div className="mt-2 rounded bg-black/30 p-2 font-mono text-xs overflow-x-auto max-h-64 overflow-y-auto">
+      {diffs.map((part, idx) => (
+        <div
+          key={idx}
+          className={
+            part.added ? "bg-green-900/50 text-green-300" :
+            part.removed ? "bg-red-900/50 text-red-300" :
+            "text-gray-400"
+          }
+        >
+          {part.value.split("\n").map((line, lineIdx) => (
+            <div key={lineIdx}>
+              {part.added && <span className="mr-2 text-green-500">+</span>}
+              {part.removed && <span className="mr-2 text-red-500">-</span>}
+              {part.added || part.removed ? line : <span className="opacity-50">{line}</span>}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { data: session } = useSession()
   
@@ -48,14 +83,19 @@ export default function Dashboard() {
   const [chatInput, setChatInput] = useState("")
   const [loading, setLoading] = useState(false)
   
-  // Pending changes state - now an array for multiple pending changes
-  const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([])
-  const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
+  // Pending changes state - array for batch changes
+  const [pendingChanges, setPendingChanges] = useState<PendingChangeWithOriginal[]>([])
   const [committing, setCommitting] = useState(false)
+  
+  // Diff preview state
+  const [showDiffFor, setShowDiffFor] = useState<string | null>(null)
   
   // Auto-commit mode toggle
   const [autoCommitMode, setAutoCommitMode] = useState(false)
   const [autoCommit, setAutoCommit] = useState(false)
+  
+  // Diff preview state
+  const [showDiffFor, setShowDiffFor] = useState<string | null>(null)
 
   // Ref for auto-scrolling to pending changes
   const pendingChangeRef = useRef<HTMLDivElement>(null)
@@ -67,12 +107,6 @@ export default function Dashboard() {
     }
   }, [pendingChanges])
   
-  // Auto-commit when autoCommit is enabled and a pendingChange is set
-  useEffect(() => {
-    if (autoCommit && pendingChange) {
-      commitChanges(true);
-    }
-  }, [pendingChange, autoCommit]);
   // Refactor plan state
   const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string; reason: string; enabled?: boolean }[] | null>(null)
   const [executingRefactor, setExecutingRefactor] = useState(false)
@@ -229,7 +263,7 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json()
         setFileContent(data.content)
-        setPendingChanges([])
+        // Don't clear pending changes when selecting a file - they may be for this file
         setGeneratedTest("")
         
         // Add system message about file selection
@@ -346,15 +380,15 @@ export default function Dashboard() {
       if (data.action === "test" && data.result?.testContent) {
         assistantMsg.testContent = data.result.testContent
         setGeneratedTest(data.result.testContent)
-        // Set pending change that will be visible and auto-scroll into view
+        // Set pending change with original content for diff preview
         const newPendingChange = {
           path: `${selectedFile}.test.ts`,
           content: data.result.testContent,
           message: `Add tests for ${selectedFile}`,
           branch: "main",
+          originalContent: "", // New test file has no original
         }
         setPendingChanges(prev => [...prev, newPendingChange])
-        setPendingChange(newPendingChange)
         
         // Auto-commit if autoCommitMode is enabled
         if (autoCommitMode) {
@@ -365,14 +399,27 @@ export default function Dashboard() {
       // Auto-handle README generation
       if (data.action === "docs" && data.result?.readme) {
         assistantMsg.content = data.result.readme
+        // Fetch existing README for diff preview
+        let existingReadme = ""
+        try {
+          const readmeRes = await fetch("/api/github/file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...repoContext, path: "README.md" }),
+          })
+          if (readmeRes.ok) {
+            const readmeData = await readmeRes.json()
+            existingReadme = readmeData.content || ""
+          }
+        } catch {}
         const newPendingChange = { 
           path: "README.md",
           content: data.result.readme,
           message: "Generate README.md from AI",
           branch: "main",
+          originalContent: existingReadme,
         }
         setPendingChanges(prev => [...prev, newPendingChange])
-        setPendingChange(newPendingChange)
         
         if (autoSaveDocs || autoCommitMode) {
           // Auto-commit when auto-save is enabled
@@ -383,14 +430,27 @@ export default function Dashboard() {
       // Auto-handle OpenAPI generation
       if (data.action === "docs" && data.result?.openapi) {
         assistantMsg.content = data.result.openapi
+        // Fetch existing OpenAPI spec for diff preview
+        let existingOpenapi = ""
+        try {
+          const openapiRes = await fetch("/api/github/file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...repoContext, path: "openapi.yaml" }),
+          })
+          if (openapiRes.ok) {
+            const openapiData = await openapiRes.json()
+            existingOpenapi = openapiData.content || ""
+          }
+        } catch {}
         const newPendingChange = { 
           path: "openapi.yaml",
           content: data.result.openapi,
           message: "Generate OpenAPI spec from AI",
           branch: "main",
+          originalContent: existingOpenapi,
         }
         setPendingChanges(prev => [...prev, newPendingChange])
-        setPendingChange(newPendingChange)
         
         if (autoSaveDocs || autoCommitMode) {
           // Auto-commit when auto-save is enabled
@@ -499,33 +559,115 @@ export default function Dashboard() {
     }
   }
 
-  const commitChanges = async (createPR: boolean) => {
-    if (!pendingChange || !repoContext) return
+  // Apply all pending changes in a batch
+  const applyAllChanges = async () => {
+    if (pendingChanges.length === 0 || !repoContext) return
     setCommitting(true)
 
     try {
+      // Create a single branch for all changes
+      const branchName = `ai-batch-${Date.now()}`
+      
+      for (const change of pendingChanges) {
+        // Get current file SHA if updating
+        let sha: string | undefined
+        const metaRes = await fetch("/api/github/file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...repoContext, path: change.path }),
+        })
+        if (metaRes.ok) {
+          const meta = await metaRes.json()
+          sha = meta.sha
+        }
+
+        // Commit each file
+        const commitRes = await fetch("/api/github/commit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...repoContext,
+            path: change.path,
+            content: change.content,
+            message: change.message,
+            branch: branchName,
+            sha,
+          }),
+        })
+
+        if (!commitRes.ok) {
+          const err = await commitRes.json()
+          throw new Error(`Failed to commit ${change.path}: ${err.error}`)
+        }
+      }
+
+      // Create a single PR for all changes
+      const prRes = await fetch("/api/github/pr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...repoContext,
+          head: branchName,
+          base: "main",
+          title: `Batch update: ${pendingChanges.length} files`,
+          body: "Changes proposed by Code Stack AI:\n\n" + pendingChanges.map(c => `- ${c.path}`).join("\n"),
+        }),
+      })
+
+      if (prRes.ok) {
+        const prData = await prRes.json()
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `✅ Batch commit complete! PR created: ${prData.data.html_url}`,
+          suggestions: ["Monitor CI for this PR", "Add reviewers"],
+        }])
+      }
+
+      setPendingChanges([])
+      // Refresh file if it was the selected one
+      if (pendingChanges.some(c => c.path === selectedFile)) {
+        selectFile(selectedFile)
+      }
+    } catch (error: any) {
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: `❌ Error: ${error.message}`,
+      }])
+    } finally {
+      setCommitting(false)
+    }
+  }
+
+  const commitChanges = async (createPR: boolean) => {
+    if (pendingChanges.length === 0 || !repoContext) return
+    setCommitting(true)
+
+    try {
+      // For single change compatibility, commit just the first pending change
+      const change = pendingChanges[0]
+      
       // Get current file SHA if updating
       let sha: string | undefined
       const metaRes = await fetch("/api/github/file", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...repoContext, path: pendingChange.path }),
+        body: JSON.stringify({ ...repoContext, path: change.path }),
       })
       if (metaRes.ok) {
         const meta = await metaRes.json()
         sha = meta.sha
       }
 
-      // Commit the changes - use branch from pendingChange or create new branch for PR
-      const branchName = createPR ? `ai-update-${Date.now()}` : pendingChange.branch
+      // Commit the changes - use branch from change or create new branch for PR
+      const branchName = createPR ? `ai-update-${Date.now()}` : change.branch
       const commitRes = await fetch("/api/github/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...repoContext,
-          path: pendingChange.path,
-          content: pendingChange.content,
-          message: pendingChange.message,
+          path: change.path,
+          content: change.content,
+          message: change.message,
           branch: branchName,
           sha,
         }),
@@ -545,7 +687,7 @@ export default function Dashboard() {
             ...repoContext,
             head: branchName,
             base: "main",
-            title: pendingChange.message,
+            title: change.message,
             body: "Changes proposed by Code Stack AI.",
           }),
         })
@@ -561,14 +703,15 @@ export default function Dashboard() {
       } else {
         setMessages(prev => [...prev, {
           role: "assistant",
-          content: `✅ Committed to ${pendingChange.branch}!`,
+          content: `✅ Committed to ${change.branch}!`,
           suggestions: ["Create a PR", "Deploy changes"],
         }])
       }
 
-      setPendingChanges([])
+      // Remove only the committed change from pending
+      setPendingChanges(prev => prev.filter(c => c.path !== change.path))
       // Refresh file if it was the selected one
-      if (pendingChange.path === selectedFile) {
+      if (change.path === selectedFile) {
         selectFile(selectedFile)
       }
     } catch (error: any) {
@@ -1189,7 +1332,7 @@ export default function Dashboard() {
                   {committing ? "Creating..." : "Create PR"}
                 </button>
                 <button
-                  onClick={() => { setPendingChanges([]); setPendingChange(null); }}
+                  onClick={() => { setPendingChanges([]);; }}
                   className="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
                 >
                   Cancel
