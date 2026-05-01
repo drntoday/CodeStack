@@ -247,18 +247,32 @@ export async function generateGreeting(
   files: string[],
   accessToken: string
 ): Promise<{ greeting: string; suggestions: string[] }> {
+  // Check for empty repository with only placeholder file
+  const isOnlyPlaceholder = files.length === 1 && files[0] === "empty.keep";
+  
+  if (isOnlyPlaceholder) {
+    return {
+      greeting: `This repository contains only empty.keep. There is no project structure to explain.`,
+      suggestions: [
+        "Add your first source file",
+        "Initialize a new project",
+        "Clone an existing project here",
+      ],
+    };
+  }
+
   // Build file tree summary for context - include up to 200 files
-  const fileListSummary = files.length > 0 
-    ? files.slice(0, 200).join("\n") 
+  const fileListSummary = files.length > 0
+    ? files.slice(0, 200).join("\n")
     : "No files found";
 
   // Add guardrail instruction when no files are available
-  const guardrailInstruction = files.length === 0 
+  const guardrailInstruction = files.length === 0
     ? "\n\nNote: This repository appears to be empty. Do NOT invent any file names or project details. Provide a generic welcome message and suggest the user add code to the repository."
     : "";
 
   const prompt = `You are Code Stack, an AI-first coding assistant. A user has just loaded the repository ${owner}/${repo}.
-  
+
 The repository contains these files (showing up to 200):
 ${fileListSummary}${guardrailInstruction}
 
@@ -274,7 +288,7 @@ Respond with ONLY valid JSON in this format:
 
   const { queryGroq } = await import("./groq");
   const responseText = await queryGroq("chat", [{ role: "user", content: prompt }]);
-  
+
   try {
     const parsed = JSON.parse(responseText);
     return {
