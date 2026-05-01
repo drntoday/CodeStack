@@ -1,4 +1,5 @@
 import { queryGroq } from "./groq";
+import { generateUnifiedDiff, formatUnifiedDiff, FileDiff } from "./diff";
 
 /**
  * Core action functions for Code Stack AI
@@ -165,6 +166,12 @@ Return ONLY the complete updated file content. No explanations, no markdown code
       
       const newContent = await queryGroq("refactor", [{ role: "user", content: prompt }]);
       
+      // Generate diff for preview before committing
+      const fileDiff = generateUnifiedDiff(oldContent, newContent, {
+        oldPath: step.file,
+        newPath: step.file,
+      });
+
       // Commit the changes
       const commitRes = await fetch(
         `https://api.github.com/repos/${owner}/${repo}/contents/${step.file}`,
