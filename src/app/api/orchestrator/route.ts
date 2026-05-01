@@ -228,10 +228,10 @@ Classify this request and respond with ONLY valid JSON.`;
         }
         const docType = parameters?.type || (message.toLowerCase().includes("readme") ? "readme" : "openapi");
         if (docType === "readme") {
-          const readme = await actions.generateReadme(repoContext.owner, repoContext.repo, accessToken);
+          const readme = await actions.generateReadme(repoContext.owner, repoContext.repo, accessToken, repoContext.files || []);
           result = { readme };
         } else {
-          const openapi = await actions.generateOpenApi(repoContext.owner, repoContext.repo, accessToken);
+          const openapi = await actions.generateOpenApi(repoContext.owner, repoContext.repo, accessToken, repoContext.files || []);
           result = { openapi };
         }
         break;
@@ -245,7 +245,8 @@ Classify this request and respond with ONLY valid JSON.`;
           repoContext.owner,
           repoContext.repo,
           parameters?.query || message,
-          accessToken
+          accessToken,
+          repoContext.files || []
         );
         result = { files };
         break;
