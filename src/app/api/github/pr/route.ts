@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
     );
     const data = await response.json();
     if (!response.ok) {
-      return NextResponse.json({ error: data }, { status: response.status });
+      const errData = await response.json();
+      return NextResponse.json({ error: errData.message || "PR creation failed" }, { status: response.status });
     }
     return NextResponse.json({ success: true, data });
   } catch (error) {

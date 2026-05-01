@@ -91,7 +91,10 @@ export default function Dashboard() {
   // File tree state
   const [selectedFile, setSelectedFile] = useState("")
   const [fileContent, setFileContent] = useState("")
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(typeof window !== "undefined" ? window.innerWidth >= 768 : true)
+  
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: string } | null>(null)
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
@@ -163,6 +166,16 @@ export default function Dashboard() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  // Resize listener for mobile sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) setSidebarOpen(false);
+      else setSidebarOpen(true);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [])
 
   // Load repo tree on initial mount if we have a cached repo
   useEffect(() => {
@@ -289,6 +302,26 @@ export default function Dashboard() {
     }
   }
 
+  const runTests = async (testFile: string) => {
+    if (!repoContext) return;
+    try {
+      const res = await fetch("/api/deploy/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner: repoContext.owner,
+          repo: repoContext.repo,
+          workflow_id: "run-tests.yml",
+          ref: "main",
+        }),
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { role: "assistant", content: data.success ? "✅ Test run dispatched. Check Actions." : `❌ ${data.error}` }]);
+    } catch (e: any) {
+      setMessages(prev => [...prev, { role: "assistant", content: "❌ Test run failed: " + e.message }]);
+    }
+  };
+
   const sendMessage = async (customMessage?: string) => {
     // Block messages if timeout occurred and manual reload is needed
     if (manualReloadNeeded) {
@@ -340,6 +373,11 @@ export default function Dashboard() {
         setMessages(prev => [...prev, { role: "assistant", content: "Error: Received an invalid response from the server. Please try again." }]);
         setLoading(false);
         return;
+      }
+
+      // Handle rate limit toast
+      if (data.rateLimited) {
+        setToast({ message: "Rate limit exceeded. Retrying shortly...", type: "warning" });
       }
 
       if (data.error) {
@@ -547,7 +585,7 @@ export default function Dashboard() {
         if (data.success) {
           setMessages(prev => [...prev, {
             role: "assistant",
-            content: "✅ Refactor workflow started! Check GitHub Actions for progress and the resulting PR.",
+            content: `✅ Refactor dispatched. [View Actions](https://github.com/${repoContext.owner}/${repoContext.repo}/actions)`,
             suggestions: ["Monitor the workflow", "Generate updated docs"],
           }])
           setRefactorPlan(null)

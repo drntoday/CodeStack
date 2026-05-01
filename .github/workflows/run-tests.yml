@@ -1,0 +1,25 @@
+name: Run Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      testFile:
+        description: 'Path to the test file to run'
+        required: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Run tests
+        run: npx jest ${{ github.event.inputs.testFile }} --json --outputFile=test-results.json || true
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.json

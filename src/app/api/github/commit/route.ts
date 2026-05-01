@@ -35,10 +35,8 @@ export async function POST(req: NextRequest) {
     );
     const data = await response.json();
     if (!response.ok) {
-      return NextResponse.json({ 
-        error: typeof data.message === 'string' ? data.message : 'GitHub API error',
-        details: data 
-      }, { status: response.status });
+      const errData = await response.json();
+      return NextResponse.json({ error: errData.message || "Commit failed" }, { status: response.status });
     }
     return NextResponse.json({ success: true, data });
   } catch (error) {
