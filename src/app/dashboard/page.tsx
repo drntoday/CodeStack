@@ -508,7 +508,7 @@ export default function Dashboard() {
       }
 
       // Commit the changes - use branch from pendingChange or create new branch for PR
-      const targetBranch = createPR ? `ai-update-${Date.now()}` : pendingChange.branch
+      const branchName = createPR ? `ai-update-${Date.now()}` : pendingChange.branch
       const commitRes = await fetch("/api/github/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -517,7 +517,7 @@ export default function Dashboard() {
           path: pendingChange.path,
           content: pendingChange.content,
           message: pendingChange.message,
-          branch: targetBranch,
+          branch: branchName,
           sha,
         }),
       })
@@ -528,11 +528,7 @@ export default function Dashboard() {
       }
 
       if (createPR) {
-        // Create a new branch and PR
-        const branchName = `ai-update-${Date.now()}`
-        
-        // First commit to new branch (already done above if we specify branch)
-        // Now create PR
+        // Create PR from the branch we just committed to
         const prRes = await fetch("/api/github/pr", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

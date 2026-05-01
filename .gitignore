@@ -1,4 +1,4 @@
-```gitignore
+```
 # Dependencies
 node_modules/
 
@@ -7,19 +7,6 @@ dist/
 build/
 .next/
 out/
-
-# Logs
-*.log
-
-# Environment variables
-.env.local
-.env
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
 
 # Python
 __pycache__/
@@ -30,24 +17,40 @@ __pycache__/
 env/
 venv/
 .venv/
+.ENV
+.venv.bak/
 pip-log.txt
 pip-delete-this-directory.txt
-.pytest_cache/
-.coverage
-htmlcov/
 .tox/
+.coverage
 .coverage.*
-.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+.hypothesis/
 
-# Node.js
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Environment
+.env
+.env.local
+.env.*
+!env.sample
 
-# OS generated files
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS
 .DS_Store
 Thumbs.db
 
-# Coverage directory used by tools like istanbul
+# Coverage
 coverage/
+htmlcov/
+.coverage
 ```
