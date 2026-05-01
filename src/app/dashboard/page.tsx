@@ -115,6 +115,25 @@ export default function Dashboard() {
   // Ref for auto-scrolling to pending changes
   const pendingChangeRef = useRef<HTMLDivElement>(null)
   
+  // Debounce helper for saving conversations
+  const saveConversationTimeout = useRef<NodeJS.Timeout | null>(null)
+  const saveConversation = (owner: string, repo: string, messages: Message[]) => {
+    if (saveConversationTimeout.current) {
+      clearTimeout(saveConversationTimeout.current)
+    }
+    saveConversationTimeout.current = setTimeout(async () => {
+      try {
+        await fetch("/api/conversation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner, repo, messages }),
+        })
+      } catch (e) {
+        console.error("Failed to save conversation:", e)
+      }
+    }, 2000)
+  }
+  
   // Auto-scroll to pending change when it appears
   useEffect(() => {
     if (pendingChanges.length > 0 && pendingChangeRef.current) {
@@ -185,6 +204,15 @@ export default function Dashboard() {
         const parsed = JSON.parse(savedRepo)
         setRepoContext(parsed)
         setRepoInput(`${parsed.owner}/${parsed.repo}`)
+        // Also fetch conversation history for the cached repo
+        fetch(`/api/conversation?owner=${parsed.owner}&repo=${parsed.repo}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(convData => {
+            if (convData?.messages && convData.messages.length > 0) {
+              setMessages(convData.messages)
+            }
+          })
+          .catch(console.error)
       } catch {}
     }
   }, [])
@@ -229,8 +257,21 @@ export default function Dashboard() {
         setRepoContext(context)
         localStorage.setItem("codeStackRepo", JSON.stringify(context))
         
-        // Send special message to trigger AI greeting
-        sendMessage("__REPO_LOADED__")
+        // Load saved conversation for this repo
+        try {
+          const convRes = await fetch(`/api/conversation?owner=${owner}&repo=${repo}`)
+          if (convRes.ok) {
+            const convData = await convRes.json()
+            if (convData.messages && convData.messages.length > 0) {
+              setMessages(convData.messages)
+            } else {
+              // No previous history – show the greeting message
+              setMessages(prev => [...prev, { role: "assistant", content: `Loaded ${data.files.length} files from ${owner}/${repo}. What would you like to do?`, suggestions: ["Generate README", "Add tests", "Refactor code"] }])
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load conversation history:", e)
+        }
       } else {
         alert("Failed to load repository")
       }
@@ -261,8 +302,21 @@ export default function Dashboard() {
         setRepoContext(context)
         localStorage.setItem("codeStackRepo", JSON.stringify(context))
         
-        // Send special message to trigger AI greeting
-        sendMessage("__REPO_LOADED__")
+        // Load saved conversation for this repo
+        try {
+          const convRes = await fetch(`/api/conversation?owner=${owner}&repo=${repo}`)
+          if (convRes.ok) {
+            const convData = await convRes.json()
+            if (convData.messages && convData.messages.length > 0) {
+              setMessages(convData.messages)
+            } else {
+              // No previous history – show the greeting message
+              setMessages(prev => [...prev, { role: "assistant", content: `Loaded ${data.files.length} files from ${owner}/${repo}. What would you like to do?`, suggestions: ["Generate README", "Add tests", "Refactor code"] }])
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load conversation history:", e)
+        }
       } else {
         alert("Failed to load repository")
       }
@@ -348,6 +402,11 @@ export default function Dashboard() {
     if (messageToSend !== "__REPO_LOADED__") {
       const userMsg: Message = { role: "user", content: messageToSend }
       setMessages(prev => [...prev, userMsg])
+      
+      // Persist user message to KV immediately
+      if (repoContext) {
+        saveConversation(repoContext.owner, repoContext.repo, [...messages, userMsg])
+      }
     }
     setChatInput("")
     setLoading(true)
@@ -527,6 +586,11 @@ export default function Dashboard() {
       }
 
       setMessages(prev => [...prev, assistantMsg])
+      
+      // Persist conversation to KV after every message exchange
+      if (repoContext) {
+        saveConversation(repoContext.owner, repoContext.repo, [...messages, assistantMsg])
+      }
     } catch (error: any) {
       console.error(error)
       setMessages(prev => [...prev, { 
