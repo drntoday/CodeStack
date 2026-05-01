@@ -7,10 +7,23 @@ import { queryGroq } from "./groq";
  */
 
 // ==================== CHAT ====================
-export async function generateChatResponse(messages: Array<{ role: string; content: string }>): Promise<string> {
+export async function generateChatResponse(
+  messages: Array<{ role: string; content: string }>,
+  repoContext?: { owner: string; repo: string; files?: string[] }
+): Promise<string> {
+  const systemPromptParts = ["You are an expert coding assistant. Answer helpfully and concisely."];
+  
+  // Add repository file context if available
+  if (repoContext?.files && repoContext.files.length > 0) {
+    const fileListSummary = repoContext.files.length <= 50 
+      ? repoContext.files.join("\n")
+      : repoContext.files.slice(0, 50).join("\n") + `\n... and ${repoContext.files.length - 50} more files`;
+    systemPromptParts.push(`\n\nThe user is working with the repository ${repoContext.owner}/${repoContext.repo} which contains these files:\n${fileListSummary}`);
+  }
+  
   const systemPrompt = {
     role: "system",
-    content: "You are an expert coding assistant. Answer helpfully and concisely.",
+    content: systemPromptParts.join(""),
   };
   const allMessages = [systemPrompt, ...messages];
   return await queryGroq("chat", allMessages);
@@ -133,31 +146,60 @@ ${diffText}
 }
 
 // ==================== ARCHITECTURE ====================
-export async function answerArchitecture(owner: string, repo: string, question: string, accessToken: string): Promise<string> {
-  // Fetch the actual file tree from GitHub
-  const treeRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
-    {
-      headers: {
-        Authorization: `token ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    }
-  );
+export async function answerArchitecture(
+  owner: string,
+  repo: string,
+  question: string,
+  accessToken: string,
+  files?: string[]
+): Promise<string> {
+  let fileList: string;
 
-  let fileList = "Unknown (could not fetch repository tree)";
-  if (treeRes.ok) {
-    const treeData = await treeRes.json();
-    const files = treeData.tree
-      ?.filter((item: any) => item.type === "blob")
-      .map((item: any) => item.path) || [];
-    if (files.length === 0) {
-      fileList = "The repository contains no files.";
-    } else {
-      fileList = files.join("\n");
-    }
+  // Use provided files if available, otherwise fetch from GitHub
+  if (files && files.length > 0) {
+    fileList = files.join("\n");
   } else {
-    fileList = `Could not fetch repository tree (status ${treeRes.status}).`;
+    // First, try to get the default branch name
+    const branchRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      {
+        headers: {
+          Authorization: `token ${accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+
+    let branchName = "main";
+    if (branchRes.ok) {
+      const repoData = await branchRes.json();
+      branchName = repoData.default_branch || "main";
+    }
+
+    // Fetch the actual file tree from GitHub using the correct branch
+    const treeRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/${branchName}?recursive=1`,
+      {
+        headers: {
+          Authorization: `token ${accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+
+    if (treeRes.ok) {
+      const treeData = await treeRes.json();
+      const fetchedFiles = treeData.tree
+        ?.filter((item: any) => item.type === "blob")
+        .map((item: any) => item.path) || [];
+      if (fetchedFiles.length === 0) {
+        fileList = "The repository contains no files.";
+      } else {
+        fileList = fetchedFiles.join("\n");
+      }
+    } else {
+      fileList = `Could not fetch repository tree (status ${treeRes.status}).`;
+    }
   }
 
   const prompt = `You are an expert software architect. The repository at ${owner}/${repo} has the following files:\n${fileList}\n\nBased on this file list, answer the user's question: "${question}". If the repository is empty or has only a placeholder file, state that clearly and do not invent content.`;

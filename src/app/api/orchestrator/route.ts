@@ -111,7 +111,10 @@ Classify this request and respond with ONLY valid JSON.`;
 
     // Handle actions that don't require auth
     if (action === "chat" && !accessToken) {
-      const response = await actions.generateChatResponse([...messages, { role: "user", content: message }]);
+      const response = await actions.generateChatResponse(
+        [...messages, { role: "user", content: message }],
+        repoContext || undefined
+      );
       return NextResponse.json({
         action: "chat",
         result: { text: response },
@@ -152,7 +155,7 @@ Classify this request and respond with ONLY valid JSON.`;
             content: `Current file context (${selectedFile}):\n${fileContent}` 
           });
         }
-        const response = await actions.generateChatResponse(chatMessages);
+        const response = await actions.generateChatResponse(chatMessages, repoContext || undefined);
         result = { text: response };
         break;
       }
@@ -212,7 +215,8 @@ Classify this request and respond with ONLY valid JSON.`;
           repoContext.owner,
           repoContext.repo,
           parameters?.question || message,
-          accessToken
+          accessToken,
+          repoContext.files
         );
         result = { text: answer };
         break;
@@ -306,7 +310,10 @@ Classify this request and respond with ONLY valid JSON.`;
 
       default:
         // Fallback to chat
-        const response = await actions.generateChatResponse([...messages, { role: "user", content: message }]);
+        const response = await actions.generateChatResponse(
+          [...messages, { role: "user", content: message }],
+          repoContext || undefined
+        );
         result = { text: response };
         classification.action = "chat";
     }
