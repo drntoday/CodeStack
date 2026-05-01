@@ -133,32 +133,37 @@ ${diffText}
 }
 
 // ==================== ARCHITECTURE ====================
-export async function answerArchitecture(
-  owner: string,
-  repo: string,
-  question: string,
-  accessToken: string
-): Promise<string> {
+export async function answerArchitecture(owner: string, repo: string, question: string, accessToken: string): Promise<string> {
+  // Fetch the actual file tree from GitHub
   const treeRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
     {
-      headers: { Authorization: `token ${accessToken}` },
+      headers: {
+        Authorization: `token ${accessToken}`,
+        Accept: "application/vnd.github.v3+json",
+      },
     }
   );
-  if (!treeRes.ok) throw new Error("Cannot fetch repo tree");
-  const treeData = await treeRes.json();
-  const files = treeData.tree
-    .filter((item: any) => item.type === "blob" && /\.(ts|js|py|go|java|rb)$/i.test(item.path))
-    .map((item: any) => item.path);
 
-  const prompt = `You are an expert software architect. Below is a list of repository files. Answer the user question by tracing the relevant imports/exports based on file paths alone. Provide a detailed, high-level explanation with file paths.
+  let fileList = "Unknown (could not fetch repository tree)";
+  if (treeRes.ok) {
+    const treeData = await treeRes.json();
+    const files = treeData.tree
+      ?.filter((item: any) => item.type === "blob")
+      .map((item: any) => item.path) || [];
+    if (files.length === 0) {
+      fileList = "The repository contains no files.";
+    } else {
+      fileList = files.join("\n");
+    }
+  } else {
+    fileList = `Could not fetch repository tree (status ${treeRes.status}).`;
+  }
 
-Repository files:
-${files.slice(0, 30).join("\n")}
+  const prompt = `You are an expert software architect. The repository at ${owner}/${repo} has the following files:\n${fileList}\n\nBased on this file list, answer the user's question: "${question}". If the repository is empty or has only a placeholder file, state that clearly and do not invent content.`;
 
-Question: ${question}`;
-
-  return await queryGroq("architecture", [{ role: "user", content: prompt }]);
+  const { queryGroq } = await import("@/lib/groq");
+  return queryGroq("architecture", [{ role: "user", content: prompt }]);
 }
 
 // ==================== DOCS ====================
