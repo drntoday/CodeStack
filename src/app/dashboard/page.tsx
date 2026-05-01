@@ -21,6 +21,13 @@ interface RepoContext {
   files: string[]
 }
 
+interface PendingChange {
+  path: string
+  content: string
+  message: string
+  branch: string
+}
+
 export default function Dashboard() {
   const { data: session } = useSession()
   
@@ -41,25 +48,22 @@ export default function Dashboard() {
   const [chatInput, setChatInput] = useState("")
   const [loading, setLoading] = useState(false)
   
-  // Pending changes state
-  const [pendingChange, setPendingChange] = useState<{
-    path: string
-    content: string
-    message: string
-    branch: string
-  } | null>(null)
+  // Pending changes state - now an array for multiple pending changes
+  const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([])
   const [committing, setCommitting] = useState(false)
   
+  // Auto-commit mode toggle
+  const [autoCommitMode, setAutoCommitMode] = useState(false)
+
   // Ref for auto-scrolling to pending changes
   const pendingChangeRef = useRef<HTMLDivElement>(null)
   
   // Auto-scroll to pending change when it appears
   useEffect(() => {
-    if (pendingChange && pendingChangeRef.current) {
+    if (pendingChanges.length > 0 && pendingChangeRef.current) {
       pendingChangeRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
     }
-  }, [pendingChange])
-  
+  }, [pendingChanges])
   // Refactor plan state
   const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string; reason: string; enabled?: boolean }[] | null>(null)
   const [executingRefactor, setExecutingRefactor] = useState(false)
@@ -213,7 +217,7 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json()
         setFileContent(data.content)
-        setPendingChange(null)
+        setPendingChanges([])
         setGeneratedTest("")
         
         // Add system message about file selection
@@ -331,12 +335,12 @@ export default function Dashboard() {
         assistantMsg.testContent = data.result.testContent
         setGeneratedTest(data.result.testContent)
         // Set pending change that will be visible and auto-scroll into view
-        setPendingChange({
+        setPendingChanges(prev => [...prev, {
           path: `${selectedFile}.test.ts`,
           content: data.result.testContent,
           message: `Add tests for ${selectedFile}`,
           branch: "main",
-        })
+        }])
       }
 
       // Auto-handle README generation
@@ -344,12 +348,12 @@ export default function Dashboard() {
         assistantMsg.content = data.result.readme
         if (autoSaveDocs) {
           // Auto-commit README
-          setPendingChange({
+          setPendingChanges(prev => [...prev, { 
             path: "README.md",
             content: data.result.readme,
             message: "Generate README.md",
             branch: "main",
-          })
+           }])
           // Auto-commit when auto-save is enabled
           setTimeout(() => commitChanges(false), 100)
         } else {
@@ -363,12 +367,12 @@ export default function Dashboard() {
         assistantMsg.content = data.result.openapi
         if (autoSaveDocs) {
           // Auto-commit OpenAPI
-          setPendingChange({
+          setPendingChanges(prev => [...prev, { 
             path: "openapi.yaml",
             content: data.result.openapi,
             message: "Generate OpenAPI specification",
             branch: "main",
-          })
+           }])
           // Auto-commit when auto-save is enabled
           setTimeout(() => commitChanges(false), 100)
         } else {
@@ -382,12 +386,12 @@ export default function Dashboard() {
       }
 
       if (data.action === "commit" && data.result) {
-        setPendingChange({
+        setPendingChanges(prev => [...prev, { 
           path: data.result.path,
           content: data.result.content,
           message: data.result.message,
           branch: data.result.branch,
-        })
+         }])
       }
 
       setMessages(prev => [...prev, assistantMsg])
@@ -548,7 +552,7 @@ export default function Dashboard() {
         }])
       }
 
-      setPendingChange(null)
+      setPendingChanges([])
       // Refresh file if it was the selected one
       if (pendingChange.path === selectedFile) {
         selectFile(selectedFile)
@@ -1064,12 +1068,12 @@ export default function Dashboard() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              setPendingChange({
+                              setPendingChanges(prev => [...prev, { 
                                 path: msg.pendingDoc?.type === "readme" ? "README.md" : "openapi.yaml",
                                 content: msg.pendingDoc?.content || "",
                                 message: msg.pendingDoc?.type === "readme" ? "Generate README.md" : "Generate OpenAPI specification",
                                 branch: "main",
-                              })
+                               }])
                             }}
                             className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 transition-colors"
                           >
@@ -1077,12 +1081,12 @@ export default function Dashboard() {
                           </button>
                           <button
                             onClick={() => {
-                              setPendingChange({
+                              setPendingChanges(prev => [...prev, { 
                                 path: msg.pendingDoc?.type === "readme" ? "README.md" : "openapi.yaml",
                                 content: msg.pendingDoc?.content || "",
                                 message: msg.pendingDoc?.type === "readme" ? "Generate README.md" : "Generate OpenAPI specification",
                                 branch: "main",
-                              })
+                               }])
                               setTimeout(() => commitChanges(false), 100)
                             }}
                             className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors"
@@ -1138,7 +1142,7 @@ export default function Dashboard() {
                   {committing ? "Creating..." : "Create PR"}
                 </button>
                 <button
-                  onClick={() => setPendingChange(null)}
+                  onClick={() => setPendingChanges([])}
                   className="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
                 >
                   Cancel
