@@ -10,6 +10,17 @@ export async function POST(req: NextRequest) {
   if (!url)
     return NextResponse.json({ error: "Missing webhook URL" }, { status: 400 });
 
+  // SSRF protection - block internal addresses
+  try {
+    const urlObj = new URL(url);
+    const blockedHosts = ["localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"];
+    if (blockedHosts.includes(urlObj.hostname) || urlObj.hostname.endsWith(".local")) {
+      return NextResponse.json({ error: "Cannot trigger webhooks to internal addresses" }, { status: 403 });
+    }
+  } catch (e) {
+    return NextResponse.json({ error: "Invalid URL format" }, { status: 400 });
+  }
+
   try {
     const webhookRes = await fetch(url, {
       method: "POST",

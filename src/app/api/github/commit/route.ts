@@ -12,6 +12,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
+  // Path traversal protection
+  if (path.includes("..") || path.startsWith("/") || path.startsWith("\\")) {
+    return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
+  }
+
   // If a sha is provided, we are updating an existing file (must match)
   // Otherwise we are creating a new file.
   const body: any = {

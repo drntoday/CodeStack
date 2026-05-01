@@ -12,6 +12,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
+  // Path traversal protection
+  if (path.includes("..") || path.startsWith("/") || path.startsWith("\\")) {
+    return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
+  }
+
   try {
     const response = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
