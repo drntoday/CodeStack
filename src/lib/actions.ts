@@ -167,77 +167,68 @@ export async function answerArchitecture(owner: string, repo: string, question: 
 }
 
 // ==================== DOCS ====================
-export async function generateReadme(
-  owner: string,
-  repo: string,
-  accessToken: string
-): Promise<string> {
-  const files = ["package.json", "tsconfig.json", "eslint.config.mjs", "src/app/layout.tsx", "src/app/api/chat/route.ts", "src/auth.ts"];
-  let collected = "";
-  for (const file of files) {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${file}`, {
-      headers: { Authorization: `token ${accessToken}` },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.content) {
-        collected += `=== ${file} ===\n${Buffer.from(data.content, "base64").toString("utf-8")}\n\n`;
-      }
+export async function generateReadme(owner: string, repo: string, accessToken: string): Promise<string> {
+  // Fetch file tree
+  const treeRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
+    {
+      headers: {
+        Authorization: `token ${accessToken}`,
+        Accept: "application/vnd.github.v3+json",
+      },
     }
+  );
+
+  let fileList = "Unknown (could not fetch repository tree)";
+  if (treeRes.ok) {
+    const treeData = await treeRes.json();
+    const files = treeData.tree
+      ?.filter((item: any) => item.type === "blob")
+      .map((item: any) => item.path) || [];
+    if (files.length === 0) {
+      return "The repository contains no files. Nothing to document.";
+    }
+    fileList = files.join("\n");
+  } else {
+    return `Could not fetch repository tree (status ${treeRes.status}). Cannot generate README.`;
   }
 
-  const prompt = `You are a technical writer. Given the following files from a Next.js project, produce a thorough README.md. Include:
-- Project title and description
-- Features
-- Prerequisites
-- Installation
-- Environment variables
-- Usage (how to run, build, deploy)
-- Project structure overview
-Use proper Markdown formatting.
-
-${collected}`;
-
-  return await queryGroq("docs", [{ role: "user", content: prompt }]);
+  const prompt = `You are a technical writer. The repository at ${owner}/${repo} contains these files:\n${fileList}\n\nGenerate a professional README.md based on this file structure. If the repository appears to be empty or has only a placeholder like "empty.keep", state that clearly and do not invent content.`;
+  
+  const { queryGroq } = await import("@/lib/groq");
+  return queryGroq("docs", [{ role: "user", content: prompt }]);
 }
 
-export async function generateOpenApi(
-  owner: string,
-  repo: string,
-  accessToken: string
-): Promise<string> {
-  const routes = [
-    "src/app/api/chat/route.ts",
-    "src/app/api/github/file/route.ts",
-    "src/app/api/github/tree/route.ts",
-    "src/app/api/github/commit/route.ts",
-    "src/app/api/github/pr/route.ts",
-    "src/app/api/refactor/plan/route.ts",
-    "src/app/api/refactor/execute/route.ts",
-    "src/app/api/tests/generate/route.ts",
-    "src/app/api/audit/route.ts",
-    "src/app/api/architecture/ask/route.ts",
-    "src/app/api/docs/generate-readme/route.ts",
-    "src/app/api/webhooks/workflow-failed/route.ts"
-  ];
-  let routeCode = "";
-  for (const route of routes) {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${route}`, {
-      headers: { Authorization: `token ${accessToken}` },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.content) {
-        routeCode += `=== ${route} ===\n${Buffer.from(data.content, "base64").toString("utf-8")}\n\n`;
-      }
+export async function generateOpenApi(owner: string, repo: string, accessToken: string): Promise<string> {
+  // Fetch file tree
+  const treeRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
+    {
+      headers: {
+        Authorization: `token ${accessToken}`,
+        Accept: "application/vnd.github.v3+json",
+      },
     }
+  );
+
+  let fileList = "Unknown (could not fetch repository tree)";
+  if (treeRes.ok) {
+    const treeData = await treeRes.json();
+    const files = treeData.tree
+      ?.filter((item: any) => item.type === "blob")
+      .map((item: any) => item.path) || [];
+    if (files.length === 0) {
+      return "The repository contains no files. Nothing to generate an OpenAPI spec from.";
+    }
+    fileList = files.join("\n");
+  } else {
+    return `Could not fetch repository tree (status ${treeRes.status}). Cannot generate OpenAPI spec.`;
   }
 
-  const prompt = `Analyze the following Next.js API route handlers and generate an OpenAPI 3.0 specification (YAML) for all endpoints. Include request bodies, query parameters, and responses. Use sensible summaries.
-
-${routeCode}`;
-
-  return await queryGroq("docs", [{ role: "user", content: prompt }]);
+  const prompt = `You are an API documentation expert. The repository at ${owner}/${repo} contains these files:\n${fileList}\n\nGenerate an OpenAPI 3.0 specification (YAML) if API routes exist. If no API-related files are present, state that there is no API to document. Do not invent endpoints.`;
+  
+  const { queryGroq } = await import("@/lib/groq");
+  return queryGroq("docs", [{ role: "user", content: prompt }]);
 }
 
 // ==================== SEARCH ====================
