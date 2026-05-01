@@ -35,24 +35,11 @@ export async function generateRefactorPlan(
   repo: string,
   prompt: string,
   accessToken: string,
-  files?: string[]
+  files: string[]
 ): Promise<Array<{ file: string; instruction: string; reason: string }>> {
-  // Fetch tree if not provided
-  if (!files) {
-    const treeRes = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
-      {
-        headers: {
-          Authorization: `token ${accessToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-      }
-    );
-    if (!treeRes.ok) throw new Error("Cannot fetch tree");
-    const treeData = await treeRes.json();
-    files = treeData.tree
-      .filter((item: any) => item.type === "blob" && !item.path.includes("node_modules"))
-      .map((item: any) => item.path);
+  // Return error if files list is empty
+  if (files.length === 0) {
+    throw new Error("The repository contains no files.");
   }
 
   // Include up to 200 files in the prompt
@@ -153,60 +140,16 @@ export async function answerArchitecture(
   repo: string,
   question: string,
   accessToken: string,
-  files?: string[]
+  files: string[]
 ): Promise<string> {
-  let fileList: string;
-
-  // Use provided files if available, otherwise fetch from GitHub
-  if (files && files.length > 0) {
-    // Include up to 200 files
-    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
-    fileList = filesToUse.join("\n");
-  } else {
-    // First, try to get the default branch name
-    const branchRes = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}`,
-      {
-        headers: {
-          Authorization: `token ${accessToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-      }
-    );
-
-    let branchName = "main";
-    if (branchRes.ok) {
-      const repoData = await branchRes.json();
-      branchName = repoData.default_branch || "main";
-    }
-
-    // Fetch the actual file tree from GitHub using the correct branch
-    const treeRes = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/trees/${branchName}?recursive=1`,
-      {
-        headers: {
-          Authorization: `token ${accessToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-      }
-    );
-
-    if (treeRes.ok) {
-      const treeData = await treeRes.json();
-      const fetchedFiles = treeData.tree
-        ?.filter((item: any) => item.type === "blob")
-        .map((item: any) => item.path) || [];
-      if (fetchedFiles.length === 0) {
-        fileList = "The repository contains no files.";
-      } else {
-        // Include up to 200 files
-        const filesToUse = fetchedFiles.length <= 200 ? fetchedFiles : fetchedFiles.slice(0, 200);
-        fileList = filesToUse.join("\n");
-      }
-    } else {
-      fileList = `Could not fetch repository tree (status ${treeRes.status}).`;
-    }
+  // Return error if files list is empty
+  if (files.length === 0) {
+    return "The repository contains no files.";
   }
+
+  // Include up to 200 files
+  const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+  const fileList = filesToUse.join("\n");
 
   const prompt = `You are an expert software architect. The repository at ${owner}/${repo} has the following files:\n${fileList}\n\nBased on this file list, answer the user's question: "${question}". If the repository is empty or has only a placeholder file, state that clearly and do not invent content.`;
 
@@ -215,33 +158,20 @@ export async function answerArchitecture(
 }
 
 // ==================== DOCS ====================
-export async function generateReadme(owner: string, repo: string, accessToken: string): Promise<string> {
-  // Fetch file tree
-  const treeRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
-    {
-      headers: {
-        Authorization: `token ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    }
-  );
-
-  let fileList = "Unknown (could not fetch repository tree)";
-  if (treeRes.ok) {
-    const treeData = await treeRes.json();
-    const files = treeData.tree
-      ?.filter((item: any) => item.type === "blob")
-      .map((item: any) => item.path) || [];
-    if (files.length === 0) {
-      return "The repository contains no files. Nothing to document.";
-    }
-    // Include up to 200 files
-    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
-    fileList = filesToUse.join("\n");
-  } else {
-    return `Could not fetch repository tree (status ${treeRes.status}). Cannot generate README.`;
+export async function generateReadme(
+  owner: string,
+  repo: string,
+  accessToken: string,
+  files: string[]
+): Promise<string> {
+  // Return error if files list is empty
+  if (files.length === 0) {
+    return "The repository contains no files.";
   }
+
+  // Include up to 200 files
+  const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+  const fileList = filesToUse.join("\n");
 
   const prompt = `You are a technical writer. The repository at ${owner}/${repo} contains these files:\n${fileList}\n\nGenerate a professional README.md based on this file structure. If the repository appears to be empty or has only a placeholder like "empty.keep", state that clearly and do not invent content.`;
   
@@ -249,33 +179,20 @@ export async function generateReadme(owner: string, repo: string, accessToken: s
   return queryGroq("docs", [{ role: "user", content: prompt }]);
 }
 
-export async function generateOpenApi(owner: string, repo: string, accessToken: string): Promise<string> {
-  // Fetch file tree
-  const treeRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
-    {
-      headers: {
-        Authorization: `token ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    }
-  );
-
-  let fileList = "Unknown (could not fetch repository tree)";
-  if (treeRes.ok) {
-    const treeData = await treeRes.json();
-    const files = treeData.tree
-      ?.filter((item: any) => item.type === "blob")
-      .map((item: any) => item.path) || [];
-    if (files.length === 0) {
-      return "The repository contains no files. Nothing to generate an OpenAPI spec from.";
-    }
-    // Include up to 200 files
-    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
-    fileList = filesToUse.join("\n");
-  } else {
-    return `Could not fetch repository tree (status ${treeRes.status}). Cannot generate OpenAPI spec.`;
+export async function generateOpenApi(
+  owner: string,
+  repo: string,
+  accessToken: string,
+  files: string[]
+): Promise<string> {
+  // Return error if files list is empty
+  if (files.length === 0) {
+    return "The repository contains no files.";
   }
+
+  // Include up to 200 files
+  const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+  const fileList = filesToUse.join("\n");
 
   const prompt = `You are an API documentation expert. The repository at ${owner}/${repo} contains these files:\n${fileList}\n\nGenerate an OpenAPI 3.0 specification (YAML) if API routes exist. If no API-related files are present, state that there is no API to document. Do not invent endpoints.`;
   
@@ -284,47 +201,33 @@ export async function generateOpenApi(owner: string, repo: string, accessToken: 
 }
 
 // ==================== SEARCH ====================
-export async function searchCode(owner: string, repo: string, query: string, accessToken: string): Promise<string[]> {
-  // Fetch the file tree
-  const treeRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
-    {
-      headers: {
-        Authorization: `token ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    }
-  );
-
-  if (!treeRes.ok) {
-    throw new Error(`Failed to fetch repository tree (status ${treeRes.status})`);
-  }
-
-  const treeData = await treeRes.json();
-  const allFiles = treeData.tree
-    ?.filter((item: any) => item.type === "blob")
-    .map((item: any) => item.path) || [];
-
-  if (allFiles.length === 0) {
-    // No files to search
-    return []; // empty array signals no results
+export async function searchCode(
+  owner: string,
+  repo: string,
+  query: string,
+  accessToken: string,
+  files: string[]
+): Promise<string[]> {
+  // Return error if files list is empty
+  if (files.length === 0) {
+    return [];
   }
 
   // Simple keyword matching: find files whose path or name contains the query
   const lowerQuery = query.toLowerCase();
-  const matched = allFiles.filter((file: string) => file.toLowerCase().includes(lowerQuery));
+  const matched = files.filter((file: string) => file.toLowerCase().includes(lowerQuery));
   
   if (matched.length === 0) {
     // If direct match fails, ask Groq for semantic suggestions (optional but helpful)
     // Include up to 200 files in the prompt
-    const filesToUse = allFiles.length <= 200 ? allFiles : allFiles.slice(0, 200);
+    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
     const prompt = `The repository ${owner}/${repo} contains these files:\n${filesToUse.join("\n")}\n\nThe user searched for: "${query}". Which files are most relevant? Return ONLY a JSON array of file paths, e.g., ["src/auth.ts"]. If nothing matches, return empty array [].`;
     
     const { queryGroq } = await import("@/lib/groq");
     const groqResponse = await queryGroq("search", [{ role: "user", content: prompt }]);
     try {
       const parsed = JSON.parse(groqResponse);
-      if (Array.isArray(parsed)) return parsed.filter((f: string) => allFiles.includes(f));
+      if (Array.isArray(parsed)) return parsed.filter((f: string) => files.includes(f));
     } catch {
       // ignore parsing errors
     }
