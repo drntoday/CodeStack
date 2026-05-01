@@ -260,8 +260,8 @@ export async function searchCode(owner: string, repo: string, query: string, acc
 
   // Simple keyword matching: find files whose path or name contains the query
   const lowerQuery = query.toLowerCase();
-  const matched = allFiles.filter(file => file.toLowerCase().includes(lowerQuery));
-
+  const matched = allFiles.filter((file: string) => file.toLowerCase().includes(lowerQuery));
+  
   if (matched.length === 0) {
     // If direct match fails, ask Groq for semantic suggestions (optional but helpful)
     const prompt = `The repository ${owner}/${repo} contains these files:\n${allFiles.join("\n")}\n\nThe user searched for: "${query}". Which files are most relevant? Return ONLY a JSON array of file paths, e.g., ["src/auth.ts"]. If nothing matches, return empty array [].`;
