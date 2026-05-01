@@ -86,7 +86,8 @@ export default function Dashboard() {
             const { owner: { login }, name } = repos[0]
             const ownerRepoStr = `${login}/${name}`
             setRepoInput(ownerRepoStr)
-            loadFilesDirect(ownerRepoStr)
+            setLoadingRepo(true) // Block UI while loading tree
+            return loadFilesDirect(ownerRepoStr)
           }
         })
         .catch(console.error)
@@ -186,6 +187,15 @@ export default function Dashboard() {
   const sendMessage = async (customMessage?: string) => {
     const messageToSend = customMessage || chatInput
     if (!messageToSend.trim()) return
+    
+    // Validate repoContext.files before sending
+    if (repoContext && (!repoContext.files || repoContext.files.length === 0)) {
+      setMessages(prev => [...prev, { 
+        role: "system", 
+        content: "⚠️ The file list hasn't loaded yet. Wait a moment and try again." 
+      }])
+      return
+    }
     
     // Don't add the sentinel message to visible messages
     if (messageToSend !== "__REPO_LOADED__") {
@@ -548,6 +558,15 @@ export default function Dashboard() {
 
         {/* Right Panel - Chat */}
         <main className="flex-1 flex flex-col min-w-0">
+          {/* Warning banner when file tree is missing */}
+          {repoContext && (!repoContext.files || repoContext.files.length === 0) && (
+            <div className="mx-4 mt-4 rounded-xl backdrop-blur-xl bg-amber-600/10 border border-amber-500/20 p-3">
+              <p className="text-sm text-amber-200">
+                ⚠️ The repository file list is not available. Responses may be incomplete.
+              </p>
+            </div>
+          )}
+          
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
@@ -727,14 +746,15 @@ export default function Dashboard() {
                 <input
                   type="text"
                   placeholder="What do you want to do with your codebase?"
-                  className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:border-blue-500/50 focus:outline-none transition-colors placeholder:text-white/30"
+                  className={`flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:border-blue-500/50 focus:outline-none transition-colors placeholder:text-white/30 ${loadingRepo ? 'opacity-50 cursor-not-allowed' : ''}`}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                  disabled={loadingRepo}
                 />
                 <button
                   onClick={() => sendMessage()}
-                  disabled={loading || !chatInput.trim()}
+                  disabled={loading || !chatInput.trim() || loadingRepo}
                   className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
                 >
                   Send

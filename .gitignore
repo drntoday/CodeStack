@@ -13,7 +13,7 @@ out/
 .env.local
 .env.*
 
-# Python specific
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -23,21 +23,17 @@ env/
 venv/
 .venv/
 pip-log.txt
-pip-delete-this-directory.txt
+pipenv.lock
+.tox/
+.coverage
+htmlcov/
 
 # Logs
 *.log
 
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# Testing
-.nyc_output/
-coverage-final.json
-.pytest_cache/
-.mypy_cache/
+# OS generated files
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
@@ -45,16 +41,23 @@ coverage-final.json
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# Testing
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
 
-# Compressed
-*.zip
+# Distribution / packaging
 *.tar.gz
-*.tar.bz2
-*.tar.xz
-*.gz
-*.rar
-*.7z
+*.whl
+*.egg
+*.egg-info/
+
+# Temporary files
+*.tmp
+*.temp
 ```
+
+Wait, let me reconsider. The only modified file is `src/app/dashboard/page.tsx` which is a TypeScript React component. There are no build artifacts, dependency directories, or temporary files in the changes. This appears to be just source code modification.
+
+(empty)
