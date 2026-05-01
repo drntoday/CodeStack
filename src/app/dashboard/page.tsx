@@ -12,6 +12,7 @@ interface Message {
   files?: string[]
   requiresApproval?: boolean
   suggestions?: string[]
+  pendingDoc?: { type: "readme" | "openapi"; content: string }
 }
 
 interface RepoContext {
@@ -49,12 +50,25 @@ export default function Dashboard() {
   } | null>(null)
   const [committing, setCommitting] = useState(false)
   
+  // Ref for auto-scrolling to pending changes
+  const pendingChangeRef = useRef<HTMLDivElement>(null)
+  
+  // Auto-scroll to pending change when it appears
+  useEffect(() => {
+    if (pendingChange && pendingChangeRef.current) {
+      pendingChangeRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }, [pendingChange])
+  
   // Refactor plan state
   const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string; reason: string; enabled?: boolean }[] | null>(null)
   const [executingRefactor, setExecutingRefactor] = useState(false)
   
   // Generated test state
   const [generatedTest, setGeneratedTest] = useState("")
+  
+  // Auto-save toggle for docs
+  const [autoSaveDocs, setAutoSaveDocs] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const repoLoadStartTime = useRef<number>(Date.now())
@@ -305,12 +319,51 @@ export default function Dashboard() {
       if (data.action === "test" && data.result?.testContent) {
         assistantMsg.testContent = data.result.testContent
         setGeneratedTest(data.result.testContent)
+        // Set pending change that will be visible and auto-scroll into view
         setPendingChange({
           path: `${selectedFile}.test.ts`,
           content: data.result.testContent,
           message: `Add tests for ${selectedFile}`,
           branch: "main",
         })
+      }
+
+      // Auto-handle README generation
+      if (data.action === "docs" && data.result?.readme) {
+        assistantMsg.content = data.result.readme
+        if (autoSaveDocs) {
+          // Auto-commit README
+          setPendingChange({
+            path: "README.md",
+            content: data.result.readme,
+            message: "Generate README.md",
+            branch: "main",
+          })
+          // Auto-commit when auto-save is enabled
+          setTimeout(() => commitChanges(false), 100)
+        } else {
+          // Show pending change with save button in message
+          assistantMsg.pendingDoc = { type: "readme", content: data.result.readme }
+        }
+      }
+
+      // Auto-handle OpenAPI generation
+      if (data.action === "docs" && data.result?.openapi) {
+        assistantMsg.content = data.result.openapi
+        if (autoSaveDocs) {
+          // Auto-commit OpenAPI
+          setPendingChange({
+            path: "openapi.yaml",
+            content: data.result.openapi,
+            message: "Generate OpenAPI specification",
+            branch: "main",
+          })
+          // Auto-commit when auto-save is enabled
+          setTimeout(() => commitChanges(false), 100)
+        } else {
+          // Show pending change with save button in message
+          assistantMsg.pendingDoc = { type: "openapi", content: data.result.openapi }
+        }
       }
 
       if (data.action === "search" && data.result?.files) {
@@ -506,6 +559,17 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Auto-save docs toggle */}
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoSaveDocs}
+                onChange={(e) => setAutoSaveDocs(e.target.checked)}
+                className="rounded border-white/20 bg-white/5"
+              />
+              <span className="text-white/70">Auto-save docs</span>
+            </label>
+            
             {/* Repo loader */}
             <div className="flex gap-2">
               <input
@@ -728,6 +792,44 @@ export default function Dashboard() {
                         ))}
                       </div>
                     )}
+
+                    {/* Pending doc save buttons for README/OpenAPI */}
+                    {msg.pendingDoc && (
+                      <div className="mt-3 p-3 rounded-lg bg-white/5 border border-white/10">
+                        <p className="text-xs font-semibold text-white/70 mb-2">
+                          {msg.pendingDoc.type === "readme" ? "📄 README.md generated" : "📑 OpenAPI spec generated"}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setPendingChange({
+                                path: msg.pendingDoc?.type === "readme" ? "README.md" : "openapi.yaml",
+                                content: msg.pendingDoc?.content || "",
+                                message: msg.pendingDoc?.type === "readme" ? "Generate README.md" : "Generate OpenAPI specification",
+                                branch: "main",
+                              })
+                            }}
+                            className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 transition-colors"
+                          >
+                            Save as {msg.pendingDoc.type === "readme" ? "README.md" : "openapi.yaml"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setPendingChange({
+                                path: msg.pendingDoc?.type === "readme" ? "README.md" : "openapi.yaml",
+                                content: msg.pendingDoc?.content || "",
+                                message: msg.pendingDoc?.type === "readme" ? "Generate README.md" : "Generate OpenAPI specification",
+                                branch: "main",
+                              })
+                              setTimeout(() => commitChanges(false), 100)
+                            }}
+                            className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors"
+                          >
+                            Apply & Commit
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -750,9 +852,9 @@ export default function Dashboard() {
 
           {/* Pending Change Preview */}
           {pendingChange && (
-            <div className="mx-4 mb-4 rounded-xl backdrop-blur-xl bg-amber-600/10 border border-amber-500/20 p-4">
+            <div ref={pendingChangeRef} className="mx-4 mb-4 rounded-xl backdrop-blur-xl bg-amber-600/10 border border-amber-500/20 p-4">
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                 Pending change to {pendingChange.path}
               </h3>
               <div className="text-xs text-white/60 mb-3">
@@ -762,9 +864,9 @@ export default function Dashboard() {
                 <button
                   onClick={() => commitChanges(false)}
                   disabled={committing}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 transition-colors"
+                  className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
                 >
-                  {committing ? "Committing..." : "Commit"}
+                  {committing ? "Committing..." : "✓ Apply as new test file"}
                 </button>
                 <button
                   onClick={() => commitChanges(true)}
