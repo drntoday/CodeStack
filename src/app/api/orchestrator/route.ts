@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       contextInfo.push(`File content preview: ${fileContent.slice(0, 500)}...`);
     }
     if (repoContext?.files?.length) {
-      contextInfo.push(`Repo files: ${repoContext.files.slice(0, 20).join(", ")}`);
+      contextInfo.push(`Repo files: ${repoContext.files.slice(0, 200).join("\n")}`);
     }
 
     // Step 1: Classify the intent
@@ -309,7 +309,7 @@ Classify this request and respond with ONLY valid JSON.`;
       }
 
       default:
-        // Fallback to chat
+        // Fallback to chat with repository file context
         const response = await actions.generateChatResponse(
           [...messages, { role: "user", content: message }],
           repoContext || undefined
@@ -328,6 +328,25 @@ Classify this request and respond with ONLY valid JSON.`;
 
   } catch (error: any) {
     console.error("Orchestrator error:", error);
+    
+    // Fallback to chat with repository file context
+    if (session?.accessToken && repoContext?.owner && repoContext?.repo) {
+      try {
+        const response = await actions.generateChatResponse(
+          [...messages, { role: "user", content: message || "An error occurred while processing your request." }],
+          repoContext
+        );
+        return NextResponse.json({
+          action: "chat",
+          result: { text: response },
+          message: response,
+          suggestions: generateSuggestions("chat"),
+        });
+      } catch {
+        // If even the fallback fails, return generic error
+      }
+    }
+    
     return NextResponse.json(
       { error: error.message || "Failed to process request" },
       { status: 500 }
