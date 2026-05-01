@@ -111,6 +111,7 @@ Classify this request and respond with ONLY valid JSON.`;
       return NextResponse.json({
         action: "chat",
         result: { text: response },
+        message: response,
         suggestions: generateSuggestions("chat"),
       });
     }
