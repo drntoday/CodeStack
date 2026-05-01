@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [repoInput, setRepoInput] = useState("")
   const [repoContext, setRepoContext] = useState<RepoContext | null>(null)
   const [loadingRepo, setLoadingRepo] = useState(false)
+  const [repoLoadTimeout, setRepoLoadTimeout] = useState(false)
+  const [manualReloadNeeded, setManualReloadNeeded] = useState(false)
   
   // File tree state
   const [selectedFile, setSelectedFile] = useState("")
@@ -55,6 +57,22 @@ export default function Dashboard() {
   const [generatedTest, setGeneratedTest] = useState("")
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const repoLoadStartTime = useRef<number>(Date.now())
+
+  // Timeout guard for repoContext.files
+  useEffect(() => {
+    if (loadingRepo) {
+      repoLoadStartTime.current = Date.now()
+      const timeoutId = setTimeout(() => {
+        if (!repoContext?.files) {
+          setRepoLoadTimeout(true)
+          setManualReloadNeeded(true)
+        }
+      }, 10000) // 10 second timeout
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [loadingRepo, repoContext?.files])
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -185,6 +203,15 @@ export default function Dashboard() {
   }
 
   const sendMessage = async (customMessage?: string) => {
+    // Block messages if timeout occurred and manual reload is needed
+    if (manualReloadNeeded) {
+      setMessages(prev => [...prev, { 
+        role: "system", 
+        content: "⚠️ Repository loading timed out. Please reload the page to try again." 
+      }])
+      return
+    }
+    
     const messageToSend = customMessage || chatInput
     if (!messageToSend.trim()) return
     
@@ -558,8 +585,17 @@ export default function Dashboard() {
 
         {/* Right Panel - Chat */}
         <main className="flex-1 flex flex-col min-w-0">
+          {/* Timeout error banner */}
+          {manualReloadNeeded && (
+            <div className="mx-4 mt-4 rounded-xl backdrop-blur-xl bg-red-600/20 border border-red-500/30 p-3">
+              <p className="text-sm text-red-200">
+                ⚠️ Repository loading timed out after 10 seconds. Please reload the page to try again.
+              </p>
+            </div>
+          )}
+          
           {/* Warning banner when file tree is missing */}
-          {repoContext && (!repoContext.files || repoContext.files.length === 0) && (
+          {repoContext && (!repoContext.files || repoContext.files.length === 0) && !manualReloadNeeded && (
             <div className="mx-4 mt-4 rounded-xl backdrop-blur-xl bg-amber-600/10 border border-amber-500/20 p-3">
               <p className="text-sm text-amber-200">
                 ⚠️ The repository file list is not available. Responses may be incomplete.
