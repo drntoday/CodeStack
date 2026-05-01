@@ -170,7 +170,7 @@ export default function Dashboard() {
       // Build assistant response based on action
       const assistantMsg: Message = {
         role: "assistant",
-        content: data.message || data.result?.text || "",
+        content: data.result?.text || data.message || "",
         action: data.action,
         requiresApproval: data.requiresApproval,
         suggestions: data.suggestions,
