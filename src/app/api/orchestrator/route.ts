@@ -22,6 +22,7 @@ Available actions:
 - pr: Create a pull request from staged/new changes
 - deploy: Trigger deployment workflow
 - ci: Analyze a failed CI/CD workflow run
+- dependencies: Add/update/remove npm dependencies (modifies package.json)
 - repo_loaded: Special action when a repository is first loaded (triggers AI greeting)
 
 Respond with a JSON object containing:
@@ -35,7 +36,7 @@ Respond with a JSON object containing:
 
 Parameter guidelines:
 - chat: { messages: [{role, content}] }
-- refactor: { owner, repo, prompt }
+- refactor: { owner, repo, prompt, deepContext?: boolean }
 - test: { fileContent, filePath }
 - audit: { owner, repo, commitSha }
 - architecture: { owner, repo, question }
@@ -45,12 +46,15 @@ Parameter guidelines:
 - pr: { owner, repo, head, base, title, body }
 - deploy: { owner, repo }
 - ci: { owner, repo, runId }
+- dependencies: { owner, repo, instruction: string }
 - repo_loaded: { owner, repo, files }
 
 If the user mentions a file name, try to extract it. If they want to modify code, include the proposed content.
-Always set requiresApproval=true for refactor, commit, pr, and deploy actions.
+Always set requiresApproval=true for refactor, commit, pr, deploy, and dependencies actions.
 
-Special handling: If the message is exactly "__REPO_LOADED__", respond with action: "repo_loaded".`;
+Special handling: 
+- If the message is exactly "__REPO_LOADED__", respond with action: "repo_loaded".
+- If the user says "deep refactor", set "deepContext": true in parameters for refactor action.`;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -173,7 +177,8 @@ Classify this request and respond with ONLY valid JSON.`;
           repoContext.repo,
           parameters?.prompt || message,
           accessToken,
-          repoContext.files
+          repoContext.files,
+          parameters?.deepContext || false
         );
         result = { plan };
         executionMessage = "I've generated a refactoring plan. Should I proceed?";

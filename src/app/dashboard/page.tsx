@@ -650,6 +650,92 @@ export default function Dashboard() {
     }
   }
 
+  // Commit a single pending change by index
+  const commitSingle = async (index: number, createPR: boolean = false) => {
+    if (index < 0 || index >= pendingChanges.length || !repoContext) return
+    setCommitting(true)
+
+    try {
+      const change = pendingChanges[index]
+      
+      // Get current file SHA if updating
+      let sha: string | undefined
+      const metaRes = await fetch("/api/github/file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...repoContext, path: change.path }),
+      })
+      if (metaRes.ok) {
+        const meta = await metaRes.json()
+        sha = meta.sha
+      }
+
+      // Commit the changes - use branch from change or create new branch for PR
+      const branchName = createPR ? `ai-update-${Date.now()}` : change.branch
+      const commitRes = await fetch("/api/github/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...repoContext,
+          path: change.path,
+          content: change.content,
+          message: change.message,
+          branch: branchName,
+          sha,
+        }),
+      })
+
+      if (!commitRes.ok) {
+        const err = await commitRes.json()
+        throw new Error(err.error || "Commit failed")
+      }
+
+      if (createPR) {
+        // Create PR from the branch we just committed to
+        const prRes = await fetch("/api/github/pr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...repoContext,
+            head: branchName,
+            base: "main",
+            title: change.message,
+            body: "Changes proposed by Code Stack AI.",
+          }),
+        })
+
+        if (prRes.ok) {
+          const prData = await prRes.json()
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: `✅ PR created: ${prData.data.html_url}`,
+            suggestions: ["Monitor CI for this PR", "Add reviewers"],
+          }])
+        }
+      } else {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `✅ Committed to ${change.branch}!`,
+          suggestions: ["Create a PR", "Deploy changes"],
+        }])
+      }
+
+      // Remove only the committed change from pending
+      setPendingChanges(prev => prev.filter((_, i) => i !== index))
+      // Refresh file if it was the selected one
+      if (change.path === selectedFile) {
+        selectFile(selectedFile)
+      }
+    } catch (error: any) {
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: `❌ Error: ${error.message}`,
+      }])
+    } finally {
+      setCommitting(false)
+    }
+  }
+
   const commitChanges = async (createPR: boolean) => {
     if (pendingChanges.length === 0 || !repoContext) return
     setCommitting(true)
@@ -1318,38 +1404,45 @@ export default function Dashboard() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Pending Change Preview */}
-          {pendingChange && (
+          {/* Pending Changes Tray with Diff Preview */}
+          {pendingChanges.length > 0 && (
             <div ref={pendingChangeRef} className="mx-4 mb-4 rounded-xl backdrop-blur-xl bg-amber-600/10 border border-amber-500/20 p-4">
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                Pending change to {pendingChange.path}
+                Pending Changes ({pendingChanges.length})
               </h3>
-              <div className="text-xs text-white/60 mb-3">
-                Commit message: <span className="text-white">{pendingChange.message}</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => commitChanges(false)}
-                  disabled={committing}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
-                >
-                  {committing ? "Committing..." : "✓ Commit Direct"}
-                </button>
-                <button
-                  onClick={() => commitChanges(true)}
-                  disabled={committing}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 transition-colors"
-                >
-                  {committing ? "Creating..." : "Create PR"}
-                </button>
-                <button
-                  onClick={() => { setPendingChanges([]);; }}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
+              {pendingChanges.map((change, idx) => {
+                const original = change.originalContent || "";
+                const diffLines = computeDiff(original, change.content);
+                return (
+                  <div key={idx} className="border border-amber-500/30 rounded p-2 mb-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-semibold">{change.path}</span>
+                      <button 
+                        onClick={() => setShowDiffFor(showDiffFor === change.path ? null : change.path)} 
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        {showDiffFor === change.path ? "Hide diff" : "Show diff"}
+                      </button>
+                    </div>
+                    {showDiffFor === change.path && (
+                      <pre className="mt-2 text-xs max-h-40 overflow-auto bg-black/30 p-2 rounded">
+                        {diffLines.map((line, i) => (
+                          <div key={i} className={line.type === "added" ? "bg-green-900/50" : line.type === "removed" ? "bg-red-900/50" : ""}>
+                            {line.type === "added" ? "+ " : line.type === "removed" ? "- " : "  "}{line.text}
+                          </div>
+                        ))}
+                      </pre>
+                    )}
+                    <div className="flex gap-2 mt-1">
+                      <button onClick={() => commitSingle(idx)} className="px-2 py-0.5 text-xs bg-amber-600 hover:bg-amber-500 rounded">Commit</button>
+                      <button onClick={() => commitSingle(idx, true)} className="px-2 py-0.5 text-xs bg-purple-600 hover:bg-purple-500 rounded">Create PR</button>
+                      <button onClick={() => setPendingChanges(prev => prev.filter((_, i) => i !== idx))} className="px-2 py-0.5 text-xs bg-gray-600 hover:bg-gray-500 rounded">Remove</button>
+                    </div>
+                  </div>
+                );
+              })}
+              <button onClick={applyAllChanges} className="mt-2 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-sm">Apply All</button>
             </div>
           )}
 
