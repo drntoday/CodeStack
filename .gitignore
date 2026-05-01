@@ -1,4 +1,4 @@
-```gitignore
+```
 # Dependencies
 node_modules/
 
@@ -6,12 +6,15 @@ node_modules/
 dist/
 build/
 .next/
+.nuxt/
+public/dist/
 out/
 
 # Environment variables
 .env
 .env.local
 .env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -22,35 +25,40 @@ __pycache__/
 env/
 venv/
 .venv/
-.ENV
-.python-version
+pip-log.txt
+pip-selfcheck.json
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.mypy_cache/
-.pytest_cache/
-.nyc_output/
+# Coverage
 coverage/
-junit.xml
+htmlcov/
+.coverage
+
+# Temporary files
+*.tmp
+*.temp
+*~
+```
+
+Wait, I need to reconsider this. The only modified file is `src/app/dashboard/page.tsx` which is a TypeScript React component file. There are no build artifacts, dependency directories, or temporary files in the changes. This appears to be just source code modification.
+
+```
+
 ```
