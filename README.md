@@ -49,11 +49,13 @@ npm install
 Create a `.env.local` file in the root directory with the following variables:
 ```env
 GROQ_API_KEY=your_groq_api_key
-GITHUB_CLIENT_ID=your_github_client_id
-GITHUB_CLIENT_SECRET=your_github_client_secret
-NEXTAUTH_SECRET=your_nextauth_secret
+CODESTACK_GITHUB_ID=your_github_client_id
+CODESTACK_GITHUB_SECRET=your_github_client_secret
+AUTH_SECRET=your_nextauth_secret
 NEXTAUTH_URL=http://localhost:3000
 VERCEL_KV_URL=your_vercel_kv_url
+HEALER_TOKEN=your_github_healer_token
+WEBHOOK_SECRET=your_webhook_secret
 ```
 
 4. Run the development server:
@@ -118,6 +120,39 @@ The application provides various API endpoints for different functionalities:
 ## Authentication
 
 Code Stack uses GitHub OAuth for authentication via NextAuth.js. Users can sign in with their GitHub account to access all features.
+
+## Self‑Healing Setup
+
+Code Stack includes a self-healing feature that can automatically fix issues in your repository. To enable this:
+
+1. **Create a GitHub Fine-Grained Personal Access Token:**
+   - Go to https://github.com/settings/tokens
+   - Click "Generate new token" → "Generate fine-grained token"
+   - Select the repository you want to manage
+   - Grant the following permissions:
+     - **Contents**: Read and write
+     - **Pull requests**: Read and write
+     - **Actions**: Read
+   - Generate the token and copy it
+
+2. **Create a Webhook Secret:**
+   - Generate a random secret string (e.g., using `openssl rand -base64 32`)
+
+3. **Configure Environment Variables in Vercel:**
+   - Go to your Vercel project settings
+   - Navigate to "Environment Variables"
+   - Add the following:
+     - `HEALER_TOKEN`: Your GitHub fine-grained personal access token
+     - `WEBHOOK_SECRET`: Your webhook secret string
+
+4. **Configure GitHub Webhook:**
+   - Go to your repository settings on GitHub
+   - Navigate to "Webhooks" → "Add webhook"
+   - Set Payload URL to: `https://<your-vercel-app>.vercel.app/api/webhooks/workflow-failed`
+   - Set Content type to: `application/json`
+   - Set Secret to the same value as `WEBHOOK_SECRET`
+   - Select "Let me select individual events" → Choose "Workflow runs"
+   - Save the webhook
 
 ## Deployment
 
