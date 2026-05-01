@@ -63,6 +63,7 @@ export default function Dashboard() {
   // Refactor plan state
   const [refactorPlan, setRefactorPlan] = useState<{ file: string; instruction: string; reason: string; enabled?: boolean }[] | null>(null)
   const [executingRefactor, setExecutingRefactor] = useState(false)
+  const [refactorProgress, setRefactorProgress] = useState<{ current: number; total: number } | null>(null)
   
   // Generated test state
   const [generatedTest, setGeneratedTest] = useState("")
@@ -401,7 +402,7 @@ export default function Dashboard() {
     }
   }
 
-  const executeRefactor = async () => {
+  const executeRefactor = async (mode: "workflow" | "direct" = "workflow") => {
     if (!repoContext || !refactorPlan) return
     setExecutingRefactor(true)
 
@@ -410,28 +411,64 @@ export default function Dashboard() {
         .filter(s => s.enabled)
         .map(({ file, instruction }) => ({ file, instruction }))
 
-      const res = await fetch("/api/refactor/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...repoContext, plan: planToExecute }),
-      })
+      // If mode is "direct", we need to call the backend directly with progress updates
+      if (mode === "direct") {
+        // Set initial progress state
+        setRefactorProgress({ current: 0, total: planToExecute.length })
+        
+        // Call the actions module via a new API endpoint that supports streaming/progress
+        const res = await fetch("/api/refactor/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...repoContext, plan: planToExecute, mode: "direct" }),
+        })
 
-      const data = await res.json()
-      
-      if (data.success) {
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          content: "✅ Refactor workflow started! Check GitHub Actions for progress and the resulting PR.",
-          suggestions: ["Monitor the workflow", "Generate updated docs"],
-        }])
-        setRefactorPlan(null)
+        const data = await res.json()
+        
+        // Clear progress indicator
+        setRefactorProgress(null)
+        
+        if (data.success) {
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: `✅ ${data.message || `Successfully committed ${data.filesCommitted}/${data.totalFiles} files!`}`,
+            suggestions: ["Generate updated docs", "Create a PR for these changes"],
+          }])
+          setRefactorPlan(null)
+        } else {
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: `❌ Error: ${data.error}`,
+          }])
+        }
       } else {
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          content: `❌ Error: ${data.error}`,
-        }])
+        // Original workflow dispatch mode
+        const res = await fetch("/api/refactor/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...repoContext, plan: planToExecute, mode: "workflow" }),
+        })
+
+        const data = await res.json()
+        
+        if (data.success) {
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: "✅ Refactor workflow started! Check GitHub Actions for progress and the resulting PR.",
+            suggestions: ["Monitor the workflow", "Generate updated docs"],
+          }])
+          setRefactorPlan(null)
+        } else {
+          // If workflow dispatch fails, offer to fallback to direct commit
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: `⚠️ Workflow dispatch failed (${data.error}). Would you like to try Direct Commit mode instead?`,
+            suggestions: ["Yes, use Direct Commit mode", "Cancel"],
+          }])
+        }
       }
     } catch (error: any) {
+      setRefactorProgress(null)
       setMessages(prev => [...prev, {
         role: "assistant",
         content: `❌ Error executing refactor: ${error.message}`,
@@ -527,7 +564,12 @@ export default function Dashboard() {
   }
 
   const handleSuggestionClick = (suggestion: string) => {
-    sendMessage(suggestion)
+    // Handle special suggestion for Direct Commit mode fallback
+    if (suggestion === "Yes, use Direct Commit mode") {
+      executeRefactor("direct");
+      return;
+    }
+    sendMessage(suggestion);
   }
 
   // Deploy handler
@@ -916,6 +958,24 @@ export default function Dashboard() {
                   >
                     <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                     
+                    {/* Render progress indicator for direct commit mode */}
+                    {refactorProgress && (
+                      <div className="mt-3 p-3 rounded-lg bg-blue-900/20 border border-blue-500/30">
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin h-4 w-4 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                          <span className="text-sm text-blue-300">
+                            Committing {refactorProgress.current} of {refactorProgress.total} files...
+                          </span>
+                        </div>
+                        <div className="mt-2 h-2 bg-blue-900/50 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 transition-all duration-300"
+                            style={{ width: `${(refactorProgress.current / refactorProgress.total) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Render plan if present */}
                     {msg.plan && (
                       <div className="mt-3 space-y-2">
@@ -941,13 +1001,22 @@ export default function Dashboard() {
                           ))}
                         </ul>
                         {msg.requiresApproval && (
-                          <button
-                            onClick={executeRefactor}
-                            disabled={executingRefactor}
-                            className="mt-2 px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
-                          >
-                            {executingRefactor ? "Executing..." : "✓ Approve & Execute"}
-                          </button>
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              onClick={() => executeRefactor("workflow")}
+                              disabled={executingRefactor}
+                              className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                            >
+                              {executingRefactor ? "Executing..." : "✓ Approve & Execute (Workflow)"}
+                            </button>
+                            <button
+                              onClick={() => executeRefactor("direct")}
+                              disabled={executingRefactor}
+                              className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 transition-colors"
+                            >
+                              ⚡ Direct Commit (Fallback)
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}

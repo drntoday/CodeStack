@@ -63,8 +63,15 @@ export async function executeRefactor(
   owner: string,
   repo: string,
   plan: Array<{ file: string; instruction: string }>,
-  accessToken: string
-): Promise<{ success: boolean; message?: string; error?: string }> {
+  accessToken: string,
+  mode: "workflow" | "direct" = "workflow"
+): Promise<{ success: boolean; message?: string; error?: string; filesCommitted?: number; totalFiles?: number }> {
+  // If mode is "direct", skip workflow dispatch and go straight to direct commits
+  if (mode === "direct") {
+    return await executeRefactorDirect(owner, repo, plan, accessToken);
+  }
+
+  // Try workflow dispatch first
   const dispatchRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/actions/workflows/refactor.yml/dispatches`,
     {
@@ -84,11 +91,122 @@ export async function executeRefactor(
       }),
     }
   );
+  
+  // If workflow dispatch fails (e.g., refactor.yml doesn't exist), fallback to direct commits
   if (!dispatchRes.ok) {
     const errText = await dispatchRes.text();
-    return { success: false, error: `Dispatch failed: ${errText}` };
+    console.log("Workflow dispatch failed, falling back to direct commits:", errText);
+    return await executeRefactorDirect(owner, repo, plan, accessToken);
   }
+  
   return { success: true, message: "Refactor workflow triggered. Check Actions tab." };
+}
+
+// Helper function to execute refactoring via direct commits
+async function executeRefactorDirect(
+  owner: string,
+  repo: string,
+  plan: Array<{ file: string; instruction: string }>,
+  accessToken: string
+): Promise<{ success: boolean; message?: string; error?: string; filesCommitted?: number; totalFiles?: number }> {
+  let filesCommitted = 0;
+  const totalFiles = plan.length;
+  
+  for (const step of plan) {
+    try {
+      // Get current file SHA if it exists
+      let sha: string | undefined;
+      const fileMetaRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${step.file}`,
+        {
+          headers: {
+            Authorization: `token ${accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+        }
+      );
+      
+      if (fileMetaRes.ok) {
+        const fileMeta = await fileMetaRes.json();
+        sha = fileMeta.sha;
+      }
+      
+      // Generate new content based on instruction using Groq
+      let oldContent = "";
+      if (sha) {
+        // Fetch existing content
+        const contentRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${step.file}`,
+          {
+            headers: {
+              Authorization: `token ${accessToken}`,
+              Accept: "application/vnd.github.v3+json",
+            },
+          }
+        );
+        if (contentRes.ok) {
+          const contentData = await contentRes.json();
+          oldContent = Buffer.from(contentData.content, "base64").toString("utf-8");
+        }
+      }
+      
+      // Use Groq to generate new content based on instruction
+      const { queryGroq } = await import("./groq");
+      const prompt = `You are an expert code editor. Apply the following instruction to the given file content.
+File: ${step.file}
+Instruction: ${step.instruction}
+
+Current content:
+\`\`\`
+${oldContent}
+\`\`\`
+
+Return ONLY the complete updated file content. No explanations, no markdown code blocks.`;
+      
+      const newContent = await queryGroq("refactor", [{ role: "user", content: prompt }]);
+      
+      // Commit the changes
+      const commitRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${step.file}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `token ${accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: `AI Refactor: ${step.file}`,
+            content: Buffer.from(newContent).toString("base64"),
+            branch: "main",
+            ...(sha ? { sha } : {}),
+          }),
+        }
+      );
+      
+      if (!commitRes.ok) {
+        const errData = await commitRes.json();
+        throw new Error(errData.message || "Commit failed");
+      }
+      
+      filesCommitted++;
+    } catch (error: any) {
+      console.error(`Failed to commit ${step.file}:`, error);
+      return { 
+        success: false, 
+        error: `Failed to commit ${step.file}: ${error.message}`,
+        filesCommitted,
+        totalFiles
+      };
+    }
+  }
+  
+  return { 
+    success: true, 
+    message: `Successfully committed ${filesCommitted}/${totalFiles} files directly to main.`,
+    filesCommitted,
+    totalFiles
+  };
 }
 
 // ==================== TESTS ====================
