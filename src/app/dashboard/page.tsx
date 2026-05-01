@@ -168,17 +168,31 @@ export default function Dashboard() {
       }
 
       // Extract content from any result shape
-      let assistantContent = ""
-      if (data.result?.text) assistantContent = data.result.text
-      else if (data.result?.report) assistantContent = data.result.report
-      else if (data.result?.analysis) assistantContent = data.result.analysis
-      else if (data.result?.readme) assistantContent = data.result.readme
-      else if (data.result?.openapi) assistantContent = data.result.openapi
-      else if (data.result?.testContent) assistantContent = data.result.testContent
-      else if (data.result?.files) assistantContent = data.result.files.join("\n")
-      else if (data.result?.plan) assistantContent = "Refactoring plan generated. Review below."
-      else if (data.message) assistantContent = data.message
-      else assistantContent = "No response."
+      let assistantContent = "";
+      if (data.result?.text) {
+        assistantContent = data.result.text;
+      } else if (data.result?.report) {
+        assistantContent = data.result.report;
+      } else if (data.result?.analysis) {
+        assistantContent = data.result.analysis;
+      } else if (data.result?.readme) {
+        assistantContent = data.result.readme;
+      } else if (data.result?.openapi) {
+        assistantContent = data.result.openapi;
+      } else if (data.result?.testContent) {
+        assistantContent = data.result.testContent;
+      } else if (data.result?.files) {
+        assistantContent = data.result.files.join("\n");
+      } else if (data.message) {
+        assistantContent = data.message;
+      } else {
+        assistantContent = "No response.";
+      }
+
+      // Handle refactor plan
+      if (data.result?.plan) {
+        setRefactorPlan(data.result.plan.map((step: any) => ({ ...step, enabled: true })));
+      }
 
       // Build assistant response based on action
       const assistantMsg: Message = {
