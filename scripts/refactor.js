@@ -16,7 +16,7 @@ Task: ${instruction}
 
 Provide ONLY the new file content inside a code block.`;
   const completion = await groq.chat.completions.create({
-    model: "llama-4-scout-17b", // handle large context
+    model: "meta-llama/llama-4-scout-17b-16e-instruct", // handle large context
     messages: [{ role: "user", content: prompt }],
     max_tokens: 4096,
   });
