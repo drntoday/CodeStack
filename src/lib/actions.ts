@@ -232,52 +232,52 @@ export async function generateOpenApi(owner: string, repo: string, accessToken: 
 }
 
 // ==================== SEARCH ====================
-async function buildIndex(owner: string, repo: string, token: string): Promise<Array<{ path: string; summary: string }>> {
-  const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`, {
-    headers: { Authorization: `token ${token}` },
-  });
-  const treeData = await treeRes.json();
-  const codeFiles = treeData.tree.filter((item: any) => item.type === "blob" && /\.(ts|js|tsx|jsx|py)$/i.test(item.path)).map((item: any) => item.path);
-
-  const index: { path: string; summary: string }[] = [];
-  let totalChars = 0;
-  for (const file of codeFiles.slice(0, 50)) {
-    if (totalChars > 3000) break;
-    
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${file}`, {
-      headers: { Authorization: `token ${token}` },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const content = data.content ? Buffer.from(data.content, "base64").toString("utf-8") : "";
-      const lines = content.split("\n");
-      const important = lines.filter(line => /^\s*(export\s+)?(async\s+)?function|class\s+\w+|const\s+\w+\s*=\s*(async\s*)?\(/.test(line) || line.trim().startsWith("//") || line.trim().startsWith("/*")).join("\n").slice(0, 600);
-      index.push({ path: file, summary: important });
-      totalChars += important.length;
+export async function searchCode(owner: string, repo: string, query: string, accessToken: string): Promise<string[]> {
+  // Fetch the file tree
+  const treeRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`,
+    {
+      headers: {
+        Authorization: `token ${accessToken}`,
+        Accept: "application/vnd.github.v3+json",
+      },
     }
+  );
+
+  if (!treeRes.ok) {
+    throw new Error(`Failed to fetch repository tree (status ${treeRes.status})`);
   }
-  return index;
-}
 
-export async function searchCode(
-  owner: string,
-  repo: string,
-  query: string,
-  accessToken: string
-): Promise<string[]> {
-  const index = await buildIndex(owner, repo, accessToken);
+  const treeData = await treeRes.json();
+  const allFiles = treeData.tree
+    ?.filter((item: any) => item.type === "blob")
+    .map((item: any) => item.path) || [];
 
-  const prompt = `You are given a codebase index (file paths and key declarations). Answer the question: "${query}". Output a JSON array of relevant file paths, e.g., ["src/auth.ts", "src/login.ts"]. Only JSON, no other text.
+  if (allFiles.length === 0) {
+    // No files to search
+    return []; // empty array signals no results
+  }
 
-Index:
-${JSON.stringify(index, null, 2)}`;
+  // Simple keyword matching: find files whose path or name contains the query
+  const lowerQuery = query.toLowerCase();
+  const matched = allFiles.filter(file => file.toLowerCase().includes(lowerQuery));
 
-  const text = await queryGroq("search", [{ role: "user", content: prompt }]);
-  try {
-    return JSON.parse(text);
-  } catch {
+  if (matched.length === 0) {
+    // If direct match fails, ask Groq for semantic suggestions (optional but helpful)
+    const prompt = `The repository ${owner}/${repo} contains these files:\n${allFiles.join("\n")}\n\nThe user searched for: "${query}". Which files are most relevant? Return ONLY a JSON array of file paths, e.g., ["src/auth.ts"]. If nothing matches, return empty array [].`;
+    
+    const { queryGroq } = await import("@/lib/groq");
+    const groqResponse = await queryGroq("search", [{ role: "user", content: prompt }]);
+    try {
+      const parsed = JSON.parse(groqResponse);
+      if (Array.isArray(parsed)) return parsed.filter((f: string) => allFiles.includes(f));
+    } catch {
+      // ignore parsing errors
+    }
     return [];
   }
+
+  return matched;
 }
 
 // ==================== COMMIT MESSAGE ====================
