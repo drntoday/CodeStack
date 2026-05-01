@@ -328,28 +328,9 @@ Classify this request and respond with ONLY valid JSON.`;
     });
 
   } catch (error: any) {
-    console.error("Orchestrator error:", error);
-    
-    // Fallback to chat with repository file context
-    if (session?.accessToken && repoContext?.owner && repoContext?.repo) {
-      try {
-        const response = await actions.generateChatResponse(
-          [...messages, { role: "user", content: message || "An error occurred while processing your request." }],
-          repoContext
-        );
-        return NextResponse.json({
-          action: "chat",
-          result: { text: response },
-          message: response,
-          suggestions: generateSuggestions("chat"),
-        });
-      } catch {
-        // If even the fallback fails, return generic error
-      }
-    }
-    
+    console.error("Orchestrator fatal error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to process request" },
+      { error: typeof error === "string" ? error : (error.message || "Internal server error") },
       { status: 500 }
     );
   }

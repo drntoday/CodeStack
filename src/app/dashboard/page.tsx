@@ -245,7 +245,15 @@ export default function Dashboard() {
         }),
       })
 
-      const data = await res.json()
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonError) {
+        console.error("Response is not valid JSON:", jsonError);
+        setMessages(prev => [...prev, { role: "assistant", content: "Error: Received an invalid response from the server. Please try again." }]);
+        setLoading(false);
+        return;
+      }
 
       if (data.error) {
         setMessages(prev => [...prev, { role: "assistant", content: `Error: ${data.error}` }])
