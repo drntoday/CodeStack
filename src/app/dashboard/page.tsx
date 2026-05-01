@@ -338,49 +338,54 @@ export default function Dashboard() {
         assistantMsg.testContent = data.result.testContent
         setGeneratedTest(data.result.testContent)
         // Set pending change that will be visible and auto-scroll into view
-        setPendingChanges(prev => [...prev, {
+        const newPendingChange = {
           path: `${selectedFile}.test.ts`,
           content: data.result.testContent,
           message: `Add tests for ${selectedFile}`,
           branch: "main",
-        }])
+        }
+        setPendingChanges(prev => [...prev, newPendingChange])
+        setPendingChange(newPendingChange)
+        
+        // Auto-commit if autoCommitMode is enabled
+        if (autoCommitMode) {
+          setTimeout(() => commitChanges(true), 100)
+        }
       }
 
       // Auto-handle README generation
       if (data.action === "docs" && data.result?.readme) {
         assistantMsg.content = data.result.readme
-        if (autoSaveDocs) {
-          // Auto-commit README
-          setPendingChanges(prev => [...prev, { 
-            path: "README.md",
-            content: data.result.readme,
-            message: "Generate README.md",
-            branch: "main",
-           }])
+        const newPendingChange = { 
+          path: "README.md",
+          content: data.result.readme,
+          message: "Generate README.md from AI",
+          branch: "main",
+        }
+        setPendingChanges(prev => [...prev, newPendingChange])
+        setPendingChange(newPendingChange)
+        
+        if (autoSaveDocs || autoCommitMode) {
           // Auto-commit when auto-save is enabled
           setTimeout(() => commitChanges(false), 100)
-        } else {
-          // Show pending change with save button in message
-          assistantMsg.pendingDoc = { type: "readme", content: data.result.readme }
         }
       }
 
       // Auto-handle OpenAPI generation
       if (data.action === "docs" && data.result?.openapi) {
         assistantMsg.content = data.result.openapi
-        if (autoSaveDocs) {
-          // Auto-commit OpenAPI
-          setPendingChanges(prev => [...prev, { 
-            path: "openapi.yaml",
-            content: data.result.openapi,
-            message: "Generate OpenAPI specification",
-            branch: "main",
-           }])
+        const newPendingChange = { 
+          path: "openapi.yaml",
+          content: data.result.openapi,
+          message: "Generate OpenAPI spec from AI",
+          branch: "main",
+        }
+        setPendingChanges(prev => [...prev, newPendingChange])
+        setPendingChange(newPendingChange)
+        
+        if (autoSaveDocs || autoCommitMode) {
           // Auto-commit when auto-save is enabled
           setTimeout(() => commitChanges(false), 100)
-        } else {
-          // Show pending change with save button in message
-          assistantMsg.pendingDoc = { type: "openapi", content: data.result.openapi }
         }
       }
 
@@ -502,7 +507,8 @@ export default function Dashboard() {
         sha = meta.sha
       }
 
-      // Commit the changes
+      // Commit the changes - use branch from pendingChange or create new branch for PR
+      const targetBranch = createPR ? `ai-update-${Date.now()}` : pendingChange.branch
       const commitRes = await fetch("/api/github/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -511,7 +517,7 @@ export default function Dashboard() {
           path: pendingChange.path,
           content: pendingChange.content,
           message: pendingChange.message,
-          branch: pendingChange.branch,
+          branch: targetBranch,
           sha,
         }),
       })
@@ -1135,7 +1141,7 @@ export default function Dashboard() {
                   disabled={committing}
                   className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
                 >
-                  {committing ? "Committing..." : "✓ Apply as new test file"}
+                  {committing ? "Committing..." : "✓ Commit Direct"}
                 </button>
                 <button
                   onClick={() => commitChanges(true)}
@@ -1145,7 +1151,7 @@ export default function Dashboard() {
                   {committing ? "Creating..." : "Create PR"}
                 </button>
                 <button
-                  onClick={() => setPendingChanges([])}
+                  onClick={() => { setPendingChanges([]); setPendingChange(null); }}
                   className="px-3 py-1.5 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
                 >
                   Cancel
