@@ -432,37 +432,66 @@ The repository contains these files (showing up to 200):
 ${fileListSummary}${guardrailInstruction}
 
 Based on the file structure, provide:
-1. A friendly, concise greeting (1-2 sentences) that identifies the project type (e.g., "I see this is a Next.js project with an auth system")
-2. Three intelligent, context-aware suggestions for what the user might want to do next
+1. A friendly greeting that briefly summarizes what the project appears to be about (or note if it's unclear)
+2. Three actionable follow-up suggestions the user might want to take next
 
-Respond with ONLY valid JSON in this format:
-{
-  "greeting": "Your greeting here",
-  "suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"]
-}`;
-
-  const { queryGroq } = await import("./groq");
-  const responseText = await queryGroq("chat", [{ role: "user", content: prompt }]);
+Return ONLY a JSON object with "greeting" (string) and "suggestions" (array of 3 strings).`;
 
   try {
-    const parsed = JSON.parse(responseText);
+    const { queryGroq } = await import("@/lib/groq");
+    const response = await queryGroq("chat", [{ role: "user", content: prompt }]);
+    const match = response.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (parsed.greeting && Array.isArray(parsed.suggestions)) {
+        return { greeting: parsed.greeting, suggestions: parsed.suggestions.slice(0, 3) };
+      }
+    }
+    // Fallback
     return {
-      greeting: parsed.greeting || `Loaded ${owner}/${repo}. How can I help?`,
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [
-        "Explain the project structure",
-        "Search for authentication logic",
-        "Generate a README",
-      ],
+      greeting: `Loaded ${owner}/${repo}. How can I help?`,
+      suggestions: ["Explain the project structure", "Search for specific logic", "Generate documentation"],
     };
   } catch {
     return {
       greeting: `Loaded ${owner}/${repo}. How can I help?`,
-      suggestions: [
-        "Explain the project structure",
-        "Search for authentication logic",
-        "Generate a README",
-      ],
+      suggestions: ["Explain the project structure", "Search for specific logic", "Generate documentation"],
     };
+  }
+}
+
+// ==================== SMART SUGGESTIONS ====================
+export async function generateSmartSuggestions(
+  messages: Array<{ role: string; content: string }>,
+  lastUserMessage: string,
+  assistantResponse: string
+): Promise<string[]> {
+  // We only need a few recent messages to provide context
+  const recentMessages = messages.slice(-4); // last 4 messages
+  const context = recentMessages
+    .map(m => `${m.role}: ${m.content.slice(0, 300)}`)
+    .join("\n");
+
+  const prompt = `Based on the following conversation and the assistant's latest response, suggest three short, natural follow‑up actions the user might want to take. The suggestions should advance the project, clarify the answer, or trigger a useful development action (like generating tests, refactoring, searching for a file, committing changes, deploying, etc.). Phrase each suggestion as if the user is telling the assistant what to do.
+
+Conversation:
+${context}
+User: ${lastUserMessage.slice(0, 300)}
+Assistant: ${assistantResponse.slice(0, 500)}
+
+Return ONLY a JSON array of three strings, e.g., ["Generate tests for this file", "Create a pull request", "Explain how the login flow works"]. Do not include any other text.`;
+
+  try {
+    const { queryGroq } = await import("@/lib/groq");
+    const response = await queryGroq("chat", [{ role: "user", content: prompt }]);
+    const match = response.match(/\[[\s\S]*\]/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (Array.isArray(parsed)) return parsed.slice(0, 3);
+    }
+    return [];
+  } catch {
+    return []; // silently fall back to empty
   }
 }
 
