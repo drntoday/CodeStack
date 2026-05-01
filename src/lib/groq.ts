@@ -2,15 +2,15 @@ import Groq from "groq-sdk";
 
 // Model mapping per task type (unchanged)
 const MODEL_MAP: Record<string, { primary: string; fallback: string }> = {
-  chat: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
-  refactor: { primary: "llama-4-scout-17b", fallback: "qwen-qwen-3-32b" },
-  tests: { primary: "qwen-qwen-3-32b", fallback: "llama-3.3-70b-versatile" },
-  audit: { primary: "qwen-qwen-3-32b", fallback: "llama-3.3-70b-versatile" },
-  architecture: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
-  docs: { primary: "llama-4-scout-17b", fallback: "llama-3.3-70b-versatile" },
-  search: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
-  commitMessage: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
-  ci: { primary: "llama-3.1-8b-instant", fallback: "qwen-qwen-3-32b" },
+  chat:           { primary: "llama-3.1-8b-instant",          fallback: "qwen/qwen3-32b" },
+  refactor:       { primary: "meta-llama/llama-4-scout-17b-16e-instruct", fallback: "qwen/qwen3-32b" },
+  tests:          { primary: "qwen/qwen3-32b",                fallback: "llama-3.3-70b-versatile" },
+  audit:          { primary: "qwen/qwen3-32b",                fallback: "llama-3.3-70b-versatile" },
+  architecture:   { primary: "llama-3.1-8b-instant",          fallback: "qwen/qwen3-32b" },
+  docs:           { primary: "meta-llama/llama-4-scout-17b-16e-instruct", fallback: "llama-3.3-70b-versatile" },
+  search:         { primary: "llama-3.1-8b-instant",          fallback: "qwen/qwen3-32b" },
+  commitMessage:  { primary: "llama-3.1-8b-instant",          fallback: "qwen/qwen3-32b" },
+  ci:             { primary: "llama-3.1-8b-instant",          fallback: "qwen/qwen3-32b" },
 };
 
 // Simple in‑memory rate‑limit tracker (unchanged)
