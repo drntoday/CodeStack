@@ -13,11 +13,11 @@ export async function generateChatResponse(
 ): Promise<string> {
   const systemPromptParts = ["You are an expert coding assistant. Answer helpfully and concisely."];
   
-  // Add repository file context if available
+  // Add repository file context if available - include up to 200 files
   if (repoContext?.files && repoContext.files.length > 0) {
-    const fileListSummary = repoContext.files.length <= 50 
+    const fileListSummary = repoContext.files.length <= 200 
       ? repoContext.files.join("\n")
-      : repoContext.files.slice(0, 50).join("\n") + `\n... and ${repoContext.files.length - 50} more files`;
+      : repoContext.files.slice(0, 200).join("\n") + `\n... and ${repoContext.files.length - 200} more files`;
     systemPromptParts.push(`\n\nThe user is working with the repository ${repoContext.owner}/${repoContext.repo} which contains these files:\n${fileListSummary}`);
   }
   
@@ -55,7 +55,9 @@ export async function generateRefactorPlan(
       .map((item: any) => item.path);
   }
 
-  const planPrompt = `Repository files:\n${(files ?? []).join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects with "file", "instruction", and "reason". Only JSON.`;
+  // Include up to 200 files in the prompt
+  const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+  const planPrompt = `Repository files:\n${filesToUse.join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects with "file", "instruction", and "reason". Only JSON.`;
   const responseText = await queryGroq("refactor", [
     { role: "user", content: planPrompt },
   ]);
@@ -157,7 +159,9 @@ export async function answerArchitecture(
 
   // Use provided files if available, otherwise fetch from GitHub
   if (files && files.length > 0) {
-    fileList = files.join("\n");
+    // Include up to 200 files
+    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+    fileList = filesToUse.join("\n");
   } else {
     // First, try to get the default branch name
     const branchRes = await fetch(
@@ -195,7 +199,9 @@ export async function answerArchitecture(
       if (fetchedFiles.length === 0) {
         fileList = "The repository contains no files.";
       } else {
-        fileList = fetchedFiles.join("\n");
+        // Include up to 200 files
+        const filesToUse = fetchedFiles.length <= 200 ? fetchedFiles : fetchedFiles.slice(0, 200);
+        fileList = filesToUse.join("\n");
       }
     } else {
       fileList = `Could not fetch repository tree (status ${treeRes.status}).`;
@@ -230,7 +236,9 @@ export async function generateReadme(owner: string, repo: string, accessToken: s
     if (files.length === 0) {
       return "The repository contains no files. Nothing to document.";
     }
-    fileList = files.join("\n");
+    // Include up to 200 files
+    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+    fileList = filesToUse.join("\n");
   } else {
     return `Could not fetch repository tree (status ${treeRes.status}). Cannot generate README.`;
   }
@@ -262,7 +270,9 @@ export async function generateOpenApi(owner: string, repo: string, accessToken: 
     if (files.length === 0) {
       return "The repository contains no files. Nothing to generate an OpenAPI spec from.";
     }
-    fileList = files.join("\n");
+    // Include up to 200 files
+    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+    fileList = filesToUse.join("\n");
   } else {
     return `Could not fetch repository tree (status ${treeRes.status}). Cannot generate OpenAPI spec.`;
   }
@@ -306,7 +316,9 @@ export async function searchCode(owner: string, repo: string, query: string, acc
   
   if (matched.length === 0) {
     // If direct match fails, ask Groq for semantic suggestions (optional but helpful)
-    const prompt = `The repository ${owner}/${repo} contains these files:\n${allFiles.join("\n")}\n\nThe user searched for: "${query}". Which files are most relevant? Return ONLY a JSON array of file paths, e.g., ["src/auth.ts"]. If nothing matches, return empty array [].`;
+    // Include up to 200 files in the prompt
+    const filesToUse = allFiles.length <= 200 ? allFiles : allFiles.slice(0, 200);
+    const prompt = `The repository ${owner}/${repo} contains these files:\n${filesToUse.join("\n")}\n\nThe user searched for: "${query}". Which files are most relevant? Return ONLY a JSON array of file paths, e.g., ["src/auth.ts"]. If nothing matches, return empty array [].`;
     
     const { queryGroq } = await import("@/lib/groq");
     const groqResponse = await queryGroq("search", [{ role: "user", content: prompt }]);
@@ -329,14 +341,14 @@ export async function generateGreeting(
   files: string[],
   accessToken: string
 ): Promise<{ greeting: string; suggestions: string[] }> {
-  // Build file tree summary for context
+  // Build file tree summary for context - include up to 200 files
   const fileListSummary = files.length > 0 
-    ? files.slice(0, 50).join("\n") 
+    ? files.slice(0, 200).join("\n") 
     : "No files found";
 
   const prompt = `You are Code Stack, an AI-first coding assistant. A user has just loaded the repository ${owner}/${repo}.
   
-The repository contains these files (showing up to 50):
+The repository contains these files (showing up to 200):
 ${fileListSummary}
 
 Based on the file structure, provide:
