@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 
-let cachedTree: any = null;
-let cacheTime = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.accessToken) {
@@ -14,12 +10,6 @@ export async function POST(req: NextRequest) {
   const { owner, repo } = await req.json();
   if (!owner || !repo) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-  }
-
-  // Check cache
-  const now = Date.now();
-  if (cachedTree && now - cacheTime < CACHE_DURATION) {
-    return NextResponse.json(cachedTree);
   }
 
   try {
@@ -62,8 +52,6 @@ export async function POST(req: NextRequest) {
       .filter((item: any) => item.type === "blob")
       .map((item: any) => item.path);
 
-    cachedTree = { files, owner, repo };
-    cacheTime = now;
     return NextResponse.json({ files, owner, repo });
   } catch (error) {
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
