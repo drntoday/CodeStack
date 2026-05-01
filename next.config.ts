@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    externalPackages: ["jose"],
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
