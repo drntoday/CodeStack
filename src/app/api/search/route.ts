@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   if (!owner || !repo || !query) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
   if (!files || files.length === 0) {
-    return NextResponse.json({ error: "The repository contains no files." }, { status: 400 });
+    return NextResponse.json({ error: "No file list available. Please load the repository first." }, { status: 400 });
   }
 
   const matchedFiles = await actions.searchCode(owner, repo, query, session.accessToken, files);

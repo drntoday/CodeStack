@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const { owner, repo, files } = await req.json();
 
   if (!files || files.length === 0) {
-    return NextResponse.json({ error: "The repository contains no files." }, { status: 400 });
+    return NextResponse.json({ error: "No file list available. Please load the repository first." }, { status: 400 });
   }
 
   const readme = await actions.generateReadme(owner, repo, session.accessToken, files);
