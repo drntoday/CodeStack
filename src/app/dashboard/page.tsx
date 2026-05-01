@@ -151,6 +151,7 @@ export default function Dashboard() {
       const res = await fetch("/api/github/tree", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ owner, repo }),
       })
       
@@ -182,6 +183,7 @@ export default function Dashboard() {
       const res = await fetch("/api/github/tree", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ owner, repo }),
       })
       
