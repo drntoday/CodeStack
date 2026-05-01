@@ -353,6 +353,11 @@ export default function Dashboard() {
     setLoading(true)
 
     try {
+      // Add conversation buffer to prevent token overflow - keep last 30 messages
+      const MAX_HISTORY = 30;
+      const recentMessages = messages.slice(-MAX_HISTORY);
+      const allMessages = [...recentMessages, { role: "user", content: messageToSend }];
+
       const res = await fetch("/api/orchestrator", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -361,7 +366,7 @@ export default function Dashboard() {
           repoContext,
           selectedFile,
           fileContent,
-          messages: messages.filter(m => m.role !== "system"),
+          messages: allMessages.filter(m => m.role !== "system"),  // full recent history
         }),
       })
 
