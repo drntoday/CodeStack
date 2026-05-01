@@ -22,6 +22,7 @@ Available actions:
 - pr: Create a pull request from staged/new changes
 - deploy: Trigger deployment workflow
 - ci: Analyze a failed CI/CD workflow run
+- repo_loaded: Special action when a repository is first loaded (triggers AI greeting)
 
 Respond with a JSON object containing:
 {
@@ -44,9 +45,12 @@ Parameter guidelines:
 - pr: { owner, repo, head, base, title, body }
 - deploy: { owner, repo }
 - ci: { owner, repo, runId }
+- repo_loaded: { owner, repo, files }
 
 If the user mentions a file name, try to extract it. If they want to modify code, include the proposed content.
-Always set requiresApproval=true for refactor, commit, pr, and deploy actions.`;
+Always set requiresApproval=true for refactor, commit, pr, and deploy actions.
+
+Special handling: If the message is exactly "__REPO_LOADED__", respond with action: "repo_loaded".`;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -113,6 +117,25 @@ Classify this request and respond with ONLY valid JSON.`;
         result: { text: response },
         message: response,
         suggestions: generateSuggestions("chat"),
+      });
+    }
+
+    // Handle repo_loaded special action - AI generates greeting
+    if (action === "repo_loaded") {
+      if (!accessToken || !repoContext?.owner || !repoContext?.repo) {
+        return NextResponse.json({ error: "Repository not loaded" }, { status: 400 });
+      }
+      const { greeting, suggestions } = await actions.generateGreeting(
+        repoContext.owner,
+        repoContext.repo,
+        repoContext.files || [],
+        accessToken
+      );
+      return NextResponse.json({
+        action: "repo_loaded",
+        result: { text: greeting },
+        message: greeting,
+        suggestions,
       });
     }
 
@@ -376,6 +399,11 @@ function generateSuggestions(action: string): string[] {
       "How do I fix this?",
       "Optimize the workflow",
       "Set up better caching",
+    ],
+    repo_loaded: [
+      "Explain the project structure",
+      "Search for authentication logic",
+      "Generate a README",
     ],
   };
   return suggestions[action] || ["Tell me more", "What's next?", "Help me understand"];

@@ -73,6 +73,57 @@ export default function Dashboard() {
     }
   }, [])
 
+  // Auto-load user's most recent repo when session is available
+  useEffect(() => {
+    if (session?.user?.name && !repoContext && !loadingRepo) {
+      const username = session.user.name // GitHub login
+      fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=1`, {
+        headers: { Authorization: `token ${session.accessToken}` },
+      })
+        .then(res => res.json())
+        .then(repos => {
+          if (repos?.[0]) {
+            const { owner: { login }, name } = repos[0]
+            const ownerRepoStr = `${login}/${name}`
+            setRepoInput(ownerRepoStr)
+            loadFilesDirect(ownerRepoStr)
+          }
+        })
+        .catch(console.error)
+    }
+  }, [session])
+
+  const loadFilesDirect = async (ownerRepoStr: string) => {
+    if (!ownerRepoStr.includes("/")) return alert("Enter owner/repo")
+    const [owner, repo] = ownerRepoStr.split("/")
+    setLoadingRepo(true)
+    
+    try {
+      const res = await fetch("/api/github/tree", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, repo }),
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        const context = { owner, repo, files: data.files }
+        setRepoContext(context)
+        localStorage.setItem("codeStackRepo", JSON.stringify(context))
+        
+        // Send special message to trigger AI greeting
+        sendMessage("__REPO_LOADED__")
+      } else {
+        alert("Failed to load repository")
+      }
+    } catch (error) {
+      console.error(error)
+      alert("Error loading repository")
+    } finally {
+      setLoadingRepo(false)
+    }
+  }
+
   const loadFiles = async () => {
     if (!repoInput.includes("/")) return alert("Enter owner/repo")
     const [owner, repo] = repoInput.split("/")
@@ -90,15 +141,9 @@ export default function Dashboard() {
         const context = { owner, repo, files: data.files }
         setRepoContext(context)
         localStorage.setItem("codeStackRepo", JSON.stringify(context))
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          content: `Loaded ${data.files.length} files from ${owner}/${repo}. What would you like to do?`,
-          suggestions: [
-            "Explain the project structure",
-            "Search for authentication logic",
-            "Generate a README",
-          ],
-        }])
+        
+        // Send special message to trigger AI greeting
+        sendMessage("__REPO_LOADED__")
       } else {
         alert("Failed to load repository")
       }
@@ -142,8 +187,11 @@ export default function Dashboard() {
     const messageToSend = customMessage || chatInput
     if (!messageToSend.trim()) return
     
-    const userMsg: Message = { role: "user", content: messageToSend }
-    setMessages(prev => [...prev, userMsg])
+    // Don't add the sentinel message to visible messages
+    if (messageToSend !== "__REPO_LOADED__") {
+      const userMsg: Message = { role: "user", content: messageToSend }
+      setMessages(prev => [...prev, userMsg])
+    }
     setChatInput("")
     setLoading(true)
 
