@@ -50,6 +50,7 @@ export default function Dashboard() {
   
   // Pending changes state - now an array for multiple pending changes
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([])
+  const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
   const [committing, setCommitting] = useState(false)
   
   // Auto-commit mode toggle
