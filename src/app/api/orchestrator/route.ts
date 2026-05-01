@@ -134,11 +134,16 @@ Classify this request and respond with ONLY valid JSON.`;
         [...messages, { role: "user", content: message }],
         repoContext || undefined
       );
+      const smartSuggestions = await actions.generateSmartSuggestions(
+        messages,
+        message,
+        response
+      );
       return NextResponse.json({
         action: "chat",
         result: { text: response },
         message: response,
-        suggestions: generateSuggestions("chat"),
+        suggestions: smartSuggestions.length > 0 ? smartSuggestions : [],
       });
     }
 
@@ -339,12 +344,29 @@ Classify this request and respond with ONLY valid JSON.`;
         classification.action = "chat";
     }
 
+    // Build assistant text for suggestions
+    let assistantText = executionMessage;
+    if (result?.text) assistantText = result.text;
+    else if (result?.report) assistantText = result.report;
+    else if (result?.analysis) assistantText = result.analysis;
+    else if (result?.readme) assistantText = result.readme;
+    else if (result?.openapi) assistantText = result.openapi;
+    else if (result?.testContent) assistantText = result.testContent;
+    else if (result?.files) assistantText = "Found files: " + result.files.join(", ");
+    else if (result?.plan) assistantText = "Refactoring plan generated.";
+    
+    const smartSuggestions = await actions.generateSmartSuggestions(
+      messages,
+      message,
+      assistantText
+    );
+
     return NextResponse.json({
       action: classification.action,
       result,
       requiresApproval,
       message: executionMessage,
-      suggestions: generateSuggestions(classification.action),
+      suggestions: smartSuggestions.length > 0 ? smartSuggestions : generateFallbackSuggestions(classification.action),
     });
 
   } catch (error: any) {
@@ -373,69 +395,17 @@ function extractRunId(message: string): string | null {
   return match ? match[0] : null;
 }
 
-// Generate proactive suggestions based on action
-function generateSuggestions(action: string): string[] {
-  const suggestions: Record<string, string[]> = {
-    chat: [
-      "Can you explain this in more detail?",
-      "Show me an example",
-      "What are best practices for this?",
-    ],
-    refactor: [
-      "Yes, proceed with the refactoring",
-      "Skip certain files from the plan",
-      "Generate tests after refactoring",
-    ],
-    test: [
-      "Run these tests now",
-      "Add CI workflow for tests",
-      "Increase test coverage to 90%",
-    ],
-    audit: [
-      "Fix these vulnerabilities automatically",
-      "Show me where the issues are",
-      "Generate a security report",
-    ],
-    architecture: [
-      "Create a diagram of this flow",
-      "Suggest improvements to this architecture",
-      "Where should I add caching?",
-    ],
-    docs: [
-      "Add installation instructions",
-      "Include API examples",
-      "Generate changelog too",
-    ],
-    search: [
-      "Open the most relevant file",
-      "Search for related functions",
-      "Explain how this works",
-    ],
-    commit: [
-      "Yes, commit the changes",
-      "Create a PR instead",
-      "Let me review the diff first",
-    ],
-    pr: [
-      "Yes, create the PR",
-      "Add reviewers to the PR",
-      "Monitor CI for this PR",
-    ],
-    deploy: [
-      "Yes, trigger deployment",
-      "Check deployment status",
-      "Rollback if needed",
-    ],
-    ci: [
-      "How do I fix this?",
-      "Optimize the workflow",
-      "Set up better caching",
-    ],
-    repo_loaded: [
-      "Explain the project structure",
-      "Search for authentication logic",
-      "Generate a README",
-    ],
+// Fallback suggestions when AI generation fails
+function generateFallbackSuggestions(action: string): string[] {
+  const fallbacks: Record<string, string[]> = {
+    refactor: ["Execute the plan", "Deep refactor with file contents"],
+    test: ["Apply test file", "Run tests now"],
+    docs: ["Save README.md", "Save OpenAPI spec"],
+    deploy: ["Yes, deploy now"],
+    commit: ["Commit the changes", "Create a PR"],
+    pr: ["Create the PR"],
+    ci: ["How do I fix this?"],
+    search: ["Open the most relevant file"],
   };
-  return suggestions[action] || ["Tell me more", "What's next?", "Help me understand"];
+  return fallbacks[action] || [];
 }
