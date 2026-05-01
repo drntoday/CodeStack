@@ -39,16 +39,46 @@ export async function generateRefactorPlan(
   repo: string,
   prompt: string,
   accessToken: string,
-  files: string[]
+  files?: string[],
+  deepContext?: boolean
 ): Promise<Array<{ file: string; instruction: string; reason: string }>> {
   // Return error if files list is empty - do not call LLM
-  if (files.length === 0) {
+  if (!files || files.length === 0) {
     throw new Error("No file list available. Do NOT invent any file names. If you cannot answer without the file list, say so clearly.");
   }
 
-  // Include up to 200 files in the prompt
-  const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
-  const planPrompt = `Repository files:\n${filesToUse.join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects with "file", "instruction", and "reason". Only JSON.`;
+  let planPrompt: string;
+  if (deepContext && files && files.length > 0) {
+    // Fetch file contents (up to 20 files, 20k chars total)
+    let fileContents = "";
+    let totalChars = 0;
+    const maxFiles = 20;
+    for (const file of files.slice(0, maxFiles)) {
+      const fileRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${file}`,
+        {
+          headers: {
+            Authorization: `token ${accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+        }
+      );
+      if (fileRes.ok) {
+        const fileData = await fileRes.json();
+        const content = fileData.content
+          ? Buffer.from(fileData.content, "base64").toString("utf-8")
+          : "";
+        fileContents += `File: ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+        totalChars += content.length;
+        if (totalChars > 20000) break;
+      }
+    }
+    planPrompt = `Repository files and contents:\n${fileContents}\n\nTask: ${prompt}\n\nProduce a JSON array of objects with "file", "instruction", and "reason". Only JSON.`;
+  } else {
+    // Use only file list (existing logic)
+    const filesToUse = files.length <= 200 ? files : files.slice(0, 200);
+    planPrompt = `Repository files:\n${filesToUse.join("\n")}\n\nTask: ${prompt}\n\nProduce a JSON array of objects with "file", "instruction", and "reason". Only JSON.`;
+  }
   const responseText = await queryGroq("refactor", [
     { role: "user", content: planPrompt },
   ]);
