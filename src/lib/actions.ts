@@ -280,6 +280,58 @@ export async function searchCode(owner: string, repo: string, query: string, acc
   return matched;
 }
 
+// ==================== GREETING ====================
+export async function generateGreeting(
+  owner: string,
+  repo: string,
+  files: string[],
+  accessToken: string
+): Promise<{ greeting: string; suggestions: string[] }> {
+  // Build file tree summary for context
+  const fileListSummary = files.length > 0 
+    ? files.slice(0, 50).join("\n") 
+    : "No files found";
+
+  const prompt = `You are Code Stack, an AI-first coding assistant. A user has just loaded the repository ${owner}/${repo}.
+  
+The repository contains these files (showing up to 50):
+${fileListSummary}
+
+Based on the file structure, provide:
+1. A friendly, concise greeting (1-2 sentences) that identifies the project type (e.g., "I see this is a Next.js project with an auth system")
+2. Three intelligent, context-aware suggestions for what the user might want to do next
+
+Respond with ONLY valid JSON in this format:
+{
+  "greeting": "Your greeting here",
+  "suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"]
+}`;
+
+  const { queryGroq } = await import("./groq");
+  const responseText = await queryGroq("chat", [{ role: "user", content: prompt }]);
+  
+  try {
+    const parsed = JSON.parse(responseText);
+    return {
+      greeting: parsed.greeting || `Loaded ${owner}/${repo}. How can I help?`,
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [
+        "Explain the project structure",
+        "Search for authentication logic",
+        "Generate a README",
+      ],
+    };
+  } catch {
+    return {
+      greeting: `Loaded ${owner}/${repo}. How can I help?`,
+      suggestions: [
+        "Explain the project structure",
+        "Search for authentication logic",
+        "Generate a README",
+      ],
+    };
+  }
+}
+
 // ==================== COMMIT MESSAGE ====================
 export async function generateCommitMessage(
   oldContent: string,
