@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { kv } from "@vercel/kv";
+import { getConversation, setConversation } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   if (!owner || !repo) return NextResponse.json({ error: "Missing owner/repo" }, { status: 400 });
 
   const key = `conversation:${owner}/${repo}`;
-  const messages = await kv.get(key) || [];
+  const messages = await getConversation(key);
   return NextResponse.json({ messages });
 }
 
@@ -28,6 +28,6 @@ export async function POST(req: NextRequest) {
   const key = `conversation:${owner}/${repo}`;
   // Keep only the last 100 messages to avoid unbounded storage
   const recent = messages.slice(-100);
-  await kv.set(key, recent);
+  await setConversation(key, recent);
   return NextResponse.json({ success: true });
 }
