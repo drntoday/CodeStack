@@ -160,6 +160,19 @@ The easiest way to deploy this application is using the [Vercel Platform](https:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/code-stack)
 
+### Deployment Setup
+
+To use the automated GitHub Actions deployment workflow (`.github/workflows/deploy.yml`), you need to configure the following secrets in your GitHub repository:
+
+1. **Create a Vercel token**: Go to https://vercel.com/account/tokens and generate a new API token.
+2. **Get your Project ID and Org ID**: In your Vercel project settings, find the Project ID and Organization ID.
+3. **Add GitHub Secrets**: In your GitHub repository, go to Settings → Secrets and variables → Actions and add:
+   - `VERCEL_TOKEN`: Your Vercel API token
+   - `VERCEL_PROJECT_ID`: Your Vercel project ID
+   - `VERCEL_ORG_ID`: Your Vercel organization ID
+
+Once configured, you can trigger a production deployment by going to Actions → Deploy → Run workflow.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
