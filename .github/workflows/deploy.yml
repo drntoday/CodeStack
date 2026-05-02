@@ -6,12 +6,13 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Deploy
-        run: |
-          echo "Deploying to production..."
-          # Add real deployment commands here (e.g., Vercel deploy trigger, etc.)
-          # For Vercel, you can use the Vercel CLI or just mark it as done.
-          echo "Deploy complete."
+      - uses: actions/checkout@v4
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+      - name: Deploy to Vercel
+        run: vercel --token $VERCEL_TOKEN --prod --yes

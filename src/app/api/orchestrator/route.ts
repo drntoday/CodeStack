@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { queryGroq } from "@/lib/groq";
 import * as actions from "@/lib/actions";
 import { withTimeout } from "@/lib/timeout";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Orchestrator Route - AI-first intent detection and execution
@@ -66,6 +67,12 @@ If the user's message builds on previous conversation, use the provided conversa
 
 export async function POST(req: NextRequest) {
   const session = await auth();
+  
+  // Rate limiting: 15 requests per minute for orchestrator (main entry point)
+  const identifier = `${session?.user?.email || "anonymous"}::${new Date().getMinutes()}`;
+  if (!rateLimit(identifier, 15, 60000)) {
+    return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+  }
   
   try {
     const { message, repoContext, selectedFile, fileContent, messages = [] } = await req.json();
