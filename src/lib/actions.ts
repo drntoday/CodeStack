@@ -482,8 +482,9 @@ Assistant: ${assistantResponse.slice(0, 500)}
 Return ONLY a JSON array of three strings, e.g., ["Generate tests for this file", "Create a pull request", "Explain how the login flow works"]. Do not include any other text.`;
 
   try {
-    const { queryGroq } = await import("@/lib/groq");
-    const response = await queryGroq("chat", [{ role: "user", content: prompt }]);
+    const { queryGroqWithModel } = await import("@/lib/groq");
+    // Use faster model for suggestions
+    const response = await queryGroqWithModel("llama-3.1-8b-instant", [{ role: "user", content: prompt }], { maxTokens: 256 });
     const match = response.match(/\[[\s\S]*\]/);
     if (match) {
       const parsed = JSON.parse(match[0]);

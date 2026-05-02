@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { queryGroq } from "@/lib/groq";
 import * as actions from "@/lib/actions";
+import { withTimeout } from "@/lib/timeout";
 
 /**
  * Orchestrator Route - AI-first intent detection and execution
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
       .map((m: any) => `${m.role}: ${m.content.slice(0, 200)}`)
       .join("\n");
 
-    // Step 1: Classify the intent
+    // Step 1: Classify the intent with timeout
     const classificationPrompt = `Conversation history (recent):
 ${historySnippet || "(none)"}
 
@@ -103,10 +104,27 @@ ${contextInfo.length > 0 ? "Context:\n" + contextInfo.join("\n") : ""}
 
 Classify this request and respond with ONLY valid JSON.`;
 
-    const classificationResponse = await queryGroq("chat", [
-      { role: "system", content: ORCHESTRATOR_SYSTEM_PROMPT },
-      { role: "user", content: classificationPrompt },
-    ]);
+    let classificationResponse: string;
+    try {
+      classificationResponse = await withTimeout(
+        queryGroq("chat", [
+          { role: "system", content: ORCHESTRATOR_SYSTEM_PROMPT },
+          { role: "user", content: classificationPrompt },
+        ]),
+        7000,
+        "Classification timed out"
+      );
+    } catch (timeoutError: any) {
+      console.warn("Classification timeout, falling back to chat:", timeoutError.message);
+      // Fallback to chat on timeout
+      classificationResponse = JSON.stringify({
+        action: "chat",
+        confidence: 0.5,
+        parameters: { messages: [...messages, { role: "user", content: message }] },
+        requiresApproval: false,
+        message: "I'll help you with that.",
+      });
+    }
 
     // Parse the classification
     let classification: any;
@@ -130,15 +148,32 @@ Classify this request and respond with ONLY valid JSON.`;
 
     // Handle actions that don't require auth
     if (action === "chat" && !accessToken) {
-      const response = await actions.generateChatResponse(
-        [...messages, { role: "user", content: message }],
-        repoContext || undefined
-      );
-      const smartSuggestions = await actions.generateSmartSuggestions(
-        messages,
-        message,
-        response
-      );
+      let response: string;
+      try {
+        response = await withTimeout(
+          actions.generateChatResponse(
+            [...messages, { role: "user", content: message }],
+            repoContext || undefined
+          ),
+          8000,
+          "Chat response timed out"
+        );
+      } catch (timeoutError: any) {
+        console.warn("Chat response timeout:", timeoutError.message);
+        response = "I'm sorry, the response took too long. Please try again.";
+      }
+      // Smart suggestions with shorter timeout, non-blocking
+      let smartSuggestions: string[] = [];
+      try {
+        smartSuggestions = await withTimeout(
+          actions.generateSmartSuggestions(messages, message, response),
+          5000,
+          "Suggestions timed out"
+        );
+      } catch (timeoutError: any) {
+        console.warn("Smart suggestions timeout:", timeoutError.message);
+        // Return empty suggestions on timeout
+      }
       return NextResponse.json({
         action: "chat",
         result: { text: response },
@@ -179,7 +214,17 @@ Classify this request and respond with ONLY valid JSON.`;
             content: `Current file context (${selectedFile}):\n${fileContent}` 
           });
         }
-        const response = await actions.generateChatResponse(chatMessages, repoContext || undefined);
+        let response: string;
+        try {
+          response = await withTimeout(
+            actions.generateChatResponse(chatMessages, repoContext || undefined),
+            8000,
+            "Chat response timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Chat action timeout:", timeoutError.message);
+          response = "I'm sorry, the response took too long. Please try again.";
+        }
         result = { text: response };
         break;
       }
@@ -192,14 +237,28 @@ Classify this request and respond with ONLY valid JSON.`;
             requiresApproval: false,
           }, { status: 400 });
         }
-        const plan = await actions.generateRefactorPlan(
-          repoContext.owner,
-          repoContext.repo,
-          parameters?.prompt || message,
-          accessToken,
-          repoContext.files,
-          parameters?.deepContext || false
-        );
+        let plan: any;
+        try {
+          plan = await withTimeout(
+            actions.generateRefactorPlan(
+              repoContext.owner,
+              repoContext.repo,
+              parameters?.prompt || message,
+              accessToken,
+              repoContext.files,
+              parameters?.deepContext || false
+            ),
+            8000,
+            "Refactor plan timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Refactor plan timeout:", timeoutError.message);
+          return NextResponse.json({
+            error: "Refactoring plan took too long. Please try again.",
+            action: "refactor",
+            requiresApproval: false,
+          }, { status: 504 });
+        }
         result = { plan };
         executionMessage = "I've generated a refactoring plan. Should I proceed?";
         break;
@@ -213,7 +272,21 @@ Classify this request and respond with ONLY valid JSON.`;
             requiresApproval: false,
           }, { status: 400 });
         }
-        const testContent = await actions.generateTests(fileContent, selectedFile || "unknown");
+        let testContent: string;
+        try {
+          testContent = await withTimeout(
+            actions.generateTests(fileContent, selectedFile || "unknown"),
+            8000,
+            "Test generation timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Test generation timeout:", timeoutError.message);
+          return NextResponse.json({
+            error: "Test generation took too long. Please try again.",
+            action: "test",
+            requiresApproval: false,
+          }, { status: 504 });
+        }
         result = { testContent, filePath: selectedFile };
         executionMessage = "Tests generated! Would you like to apply them?";
         break;
@@ -227,7 +300,21 @@ Classify this request and respond with ONLY valid JSON.`;
         if (!commitSha) {
           return NextResponse.json({ error: "Commit SHA required for audit" }, { status: 400 });
         }
-        const report = await actions.auditCommit(repoContext.owner, repoContext.repo, commitSha, accessToken);
+        let report: string;
+        try {
+          report = await withTimeout(
+            actions.auditCommit(repoContext.owner, repoContext.repo, commitSha, accessToken),
+            8000,
+            "Audit timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Audit timeout:", timeoutError.message);
+          return NextResponse.json({
+            error: "Security audit took too long. Please try again.",
+            action: "audit",
+            requiresApproval: false,
+          }, { status: 504 });
+        }
         result = { report };
         break;
       }
@@ -236,13 +323,27 @@ Classify this request and respond with ONLY valid JSON.`;
         if (!accessToken || !repoContext?.owner || !repoContext?.repo) {
           return NextResponse.json({ error: "Repository not loaded" }, { status: 400 });
         }
-        const answer = await actions.answerArchitecture(
-          repoContext.owner,
-          repoContext.repo,
-          parameters?.question || message,
-          accessToken,
-          repoContext.files
-        );
+        let answer: string;
+        try {
+          answer = await withTimeout(
+            actions.answerArchitecture(
+              repoContext.owner,
+              repoContext.repo,
+              parameters?.question || message,
+              accessToken,
+              repoContext.files
+            ),
+            8000,
+            "Architecture query timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Architecture query timeout:", timeoutError.message);
+          return NextResponse.json({
+            error: "Architecture analysis took too long. Please try again.",
+            action: "architecture",
+            requiresApproval: false,
+          }, { status: 504 });
+        }
         result = { text: answer };
         break;
       }
@@ -252,12 +353,30 @@ Classify this request and respond with ONLY valid JSON.`;
           return NextResponse.json({ error: "Repository not loaded" }, { status: 400 });
         }
         const docType = parameters?.type || (message.toLowerCase().includes("readme") ? "readme" : "openapi");
-        if (docType === "readme") {
-          const readme = await actions.generateReadme(repoContext.owner, repoContext.repo, accessToken, repoContext.files || []);
-          result = { readme };
-        } else {
-          const openapi = await actions.generateOpenApi(repoContext.owner, repoContext.repo, accessToken, repoContext.files || []);
-          result = { openapi };
+        let docResult: string;
+        try {
+          if (docType === "readme") {
+            docResult = await withTimeout(
+              actions.generateReadme(repoContext.owner, repoContext.repo, accessToken, repoContext.files || []),
+              8000,
+              "README generation timed out"
+            );
+            result = { readme: docResult };
+          } else {
+            docResult = await withTimeout(
+              actions.generateOpenApi(repoContext.owner, repoContext.repo, accessToken, repoContext.files || []),
+              8000,
+              "OpenAPI generation timed out"
+            );
+            result = { openapi: docResult };
+          }
+        } catch (timeoutError: any) {
+          console.warn("Docs generation timeout:", timeoutError.message);
+          return NextResponse.json({
+            error: `Documentation generation took too long. Please try again.`,
+            action: "docs",
+            requiresApproval: false,
+          }, { status: 504 });
         }
         break;
       }
@@ -266,13 +385,23 @@ Classify this request and respond with ONLY valid JSON.`;
         if (!accessToken || !repoContext?.owner || !repoContext?.repo) {
           return NextResponse.json({ error: "Repository not loaded" }, { status: 400 });
         }
-        const files = await actions.searchCode(
-          repoContext.owner,
-          repoContext.repo,
-          parameters?.query || message,
-          accessToken,
-          repoContext.files || []
-        );
+        let files: string[];
+        try {
+          files = await withTimeout(
+            actions.searchCode(
+              repoContext.owner,
+              repoContext.repo,
+              parameters?.query || message,
+              accessToken,
+              repoContext.files || []
+            ),
+            8000,
+            "Search timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Search timeout:", timeoutError.message);
+          files = []; // Return empty results on timeout
+        }
         result = { files };
         break;
       }
@@ -283,7 +412,17 @@ Classify this request and respond with ONLY valid JSON.`;
         }
         // For commit, we need the new content - either from message or generate it
         const newContent = parameters?.content || fileContent; // In real scenario, AI would generate this
-        const commitMsg = parameters?.message || await actions.generateCommitMessage("", newContent, selectedFile, message);
+        let commitMsg: string;
+        try {
+          commitMsg = parameters?.message || await withTimeout(
+            actions.generateCommitMessage("", newContent, selectedFile, message),
+            8000,
+            "Commit message generation timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Commit message timeout:", timeoutError.message);
+          commitMsg = "AI-generated changes";
+        }
         
         // Return the commit details for approval
         result = { 
@@ -329,17 +468,41 @@ Classify this request and respond with ONLY valid JSON.`;
         if (!runId) {
           return NextResponse.json({ error: "Workflow run ID required" }, { status: 400 });
         }
-        const analysis = await actions.analyzeCICD(repoContext.owner, repoContext.repo, runId, accessToken);
+        let analysis: string;
+        try {
+          analysis = await withTimeout(
+            actions.analyzeCICD(repoContext.owner, repoContext.repo, runId, accessToken),
+            8000,
+            "CI/CD analysis timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("CI/CD analysis timeout:", timeoutError.message);
+          return NextResponse.json({
+            error: "CI/CD analysis took too long. Please try again.",
+            action: "ci",
+            requiresApproval: false,
+          }, { status: 504 });
+        }
         result = { analysis };
         break;
       }
 
       default:
         // Fallback to chat with repository file context
-        const response = await actions.generateChatResponse(
-          [...messages, { role: "user", content: message }],
-          repoContext || undefined
-        );
+        let response: string;
+        try {
+          response = await withTimeout(
+            actions.generateChatResponse(
+              [...messages, { role: "user", content: message }],
+              repoContext || undefined
+            ),
+            8000,
+            "Fallback chat timed out"
+          );
+        } catch (timeoutError: any) {
+          console.warn("Fallback chat timeout:", timeoutError.message);
+          response = "I'm sorry, the response took too long. Please try again.";
+        }
         result = { text: response };
         classification.action = "chat";
     }
@@ -355,11 +518,18 @@ Classify this request and respond with ONLY valid JSON.`;
     else if (result?.files) assistantText = "Found files: " + result.files.join(", ");
     else if (result?.plan) assistantText = "Refactoring plan generated.";
     
-    const smartSuggestions = await actions.generateSmartSuggestions(
-      messages,
-      message,
-      assistantText
-    );
+    // Smart suggestions with shorter timeout, non-blocking (returns empty array on timeout)
+    let smartSuggestions: string[] = [];
+    try {
+      smartSuggestions = await withTimeout(
+        actions.generateSmartSuggestions(messages, message, assistantText),
+        5000,
+        "Suggestions timed out"
+      );
+    } catch (timeoutError: any) {
+      console.warn("Smart suggestions timeout:", timeoutError.message);
+      // Return empty suggestions on timeout - will use fallback below
+    }
 
     return NextResponse.json({
       action: classification.action,

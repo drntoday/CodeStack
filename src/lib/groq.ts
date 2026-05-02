@@ -62,3 +62,36 @@ export async function queryGroq(
     throw err;
   }
 }
+
+/**
+ * Query Groq with a specific model (for custom use cases like fast suggestions)
+ */
+export async function queryGroqWithModel(
+  model: string,
+  messages: Array<{ role: string; content: string }>,
+  options?: { maxTokens?: number; temperature?: number }
+): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not set");
+  }
+
+  const groq = new Groq({ apiKey });
+
+  const key = `${model}-${new Date().getMinutes()}`;
+  usageCounters[key] = (usageCounters[key] || 0) + 1;
+
+  const groqMessages = messages.map((m) => ({
+    role: m.role as any,
+    content: m.content,
+  }));
+
+  const completion = await groq.chat.completions.create({
+    model,
+    messages: groqMessages,
+    max_tokens: options?.maxTokens ?? 1024,
+    temperature: options?.temperature ?? 0.7,
+  });
+
+  return completion.choices[0]?.message?.content || "";
+}
