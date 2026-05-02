@@ -51,7 +51,6 @@ Available actions (classify each user request into one):
 - pr: Create a pull request
 - deploy: Trigger deployment workflow
 - ci: Analyze a failed CI/CD workflow run
-- dependencies: Add, update, or remove project dependencies
 - repo_loaded: Special action when a repository is first loaded
 
 Always respond with ONLY a JSON object containing:

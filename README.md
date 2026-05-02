@@ -109,7 +109,7 @@ src/
 
 The application provides various API endpoints for different functionalities:
 
-- `POST /api/chat` - Send messages to the AI assistant
+- `POST /api/orchestrator` - Send messages to the AI assistant
 - `POST /api/refactor` - Request code refactoring
 - `POST /api/tests` - Generate tests for code
 - `POST /api/architecture` - Analyze code architecture

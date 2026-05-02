@@ -30,7 +30,7 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install @google/generative-ai
+        run: npm install groq-sdk
 
       - name: Run refactor script
         env:
