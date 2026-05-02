@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
   // Rate limiting: 10 requests per minute
   const identifier = `${session?.user?.email || "anonymous"}::${new Date().getMinutes()}`;
-  if (!rateLimit(identifier, 10, 60000)) {
+  if (!(await rateLimit(identifier, 10, 60000))) {
     return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
   }
 
