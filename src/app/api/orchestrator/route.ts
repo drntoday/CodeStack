@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
   
   // Rate limiting: 15 requests per minute for orchestrator (main entry point)
   const identifier = `${session?.user?.email || "anonymous"}::${new Date().getMinutes()}`;
-  if (!rateLimit(identifier, 15, 60000)) {
+  if (!(await rateLimit(identifier, 15, 60000))) {
     return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
   }
   

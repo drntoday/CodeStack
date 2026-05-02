@@ -1,13 +1,11 @@
-const store = new Map<string, { count: number; resetTime: number }>();
+import { kv } from "@vercel/kv";
 
-export function rateLimit(key: string, limit: number, windowMs: number): boolean {
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
   const now = Date.now();
-  const entry = store.get(key);
-  if (!entry || now > entry.resetTime) {
-    store.set(key, { count: 1, resetTime: now + windowMs });
-    return true;
+  const windowKey = `rate:${key}:${Math.floor(now / windowMs)}`;
+  const current = await kv.incr(windowKey);
+  if (current === 1) {
+    await kv.expire(windowKey, Math.ceil(windowMs / 1000)); // set TTL
   }
-  if (entry.count >= limit) return false;
-  entry.count++;
-  return true;
+  return current <= limit;
 }

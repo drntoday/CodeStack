@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
   // Rate limiting: 5 requests per 5 minutes (stricter for SSRF protection)
   const identifier = `${session?.user?.email || "anonymous"}::${Math.floor(Date.now() / 300000)}`;
-  if (!rateLimit(identifier, 5, 300000)) {
+  if (!(await rateLimit(identifier, 5, 300000))) {
     return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
   }
 
