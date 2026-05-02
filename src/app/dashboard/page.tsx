@@ -3,6 +3,9 @@
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
+import Toast from "@/components/Toast"
+import ErrorBoundary from "@/components/ErrorBoundary"
+import { logger } from "@/lib/logger"
 
 interface Message {
   role: "user" | "assistant" | "system"
@@ -97,6 +100,10 @@ export default function Dashboard() {
   
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: string } | null>(null)
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
@@ -131,7 +138,7 @@ export default function Dashboard() {
           body: JSON.stringify({ owner, repo, messages }),
         })
       } catch (e) {
-        console.error("Failed to save conversation:", e)
+        logger.warn("Failed to save conversation", e)
       }
     }, 2000)
   }
@@ -214,7 +221,7 @@ export default function Dashboard() {
               setMessages(convData.messages)
             }
           })
-          .catch(console.error)
+          .catch((e) => logger.warn("Conversation load error", e))
       } catch {}
     }
   }, [])
@@ -236,7 +243,7 @@ export default function Dashboard() {
             return loadFilesDirect(ownerRepoStr)
           }
         })
-        .catch(console.error)
+        .catch((e) => logger.warn("Auto-load repo error", e))
     }
   }, [session])
 
@@ -248,7 +255,7 @@ export default function Dashboard() {
   }, [status, router])
 
   const loadFilesDirect = async (ownerRepoStr: string) => {
-    if (!ownerRepoStr.includes("/")) return alert("Enter owner/repo")
+    if (!ownerRepoStr.includes("/")) return showToast("Enter owner/repo", "error")
     const [owner, repo] = ownerRepoStr.split("/")
     setLoadingRepo(true)
     
@@ -279,21 +286,21 @@ export default function Dashboard() {
             }
           }
         } catch (e) {
-          console.error("Failed to load conversation history:", e)
+          logger.warn("Failed to load conversation history", e)
         }
       } else {
-        alert("Failed to load repository")
+        showToast("Failed to load repository", "error")
       }
     } catch (error) {
-      console.error(error)
-      alert("Error loading repository")
+      logger.error("Repo load error", error)
+      showToast("Error loading repository", "error")
     } finally {
       setLoadingRepo(false)
     }
   }
 
   const loadFiles = async () => {
-    if (!repoInput.includes("/")) return alert("Enter owner/repo")
+    if (!repoInput.includes("/")) return showToast("Enter owner/repo", "error")
     const [owner, repo] = repoInput.split("/")
     setLoadingRepo(true)
     
@@ -324,14 +331,14 @@ export default function Dashboard() {
             }
           }
         } catch (e) {
-          console.error("Failed to load conversation history:", e)
+          logger.warn("Failed to load conversation history", e)
         }
       } else {
-        alert("Failed to load repository")
+        showToast("Failed to load repository", "error")
       }
     } catch (error) {
-      console.error(error)
-      alert("Error loading repository")
+      logger.error("Repo load error", error)
+      showToast("Error loading repository", "error")
     } finally {
       setLoadingRepo(false)
     }
@@ -361,7 +368,7 @@ export default function Dashboard() {
         }])
       }
     } catch (error) {
-      console.error(error)
+      logger.error("File load error", error)
     }
   }
 
@@ -442,7 +449,7 @@ export default function Dashboard() {
       try {
         data = await res.json();
       } catch (jsonError) {
-        console.error("Response is not valid JSON:", jsonError);
+        logger.error("Invalid JSON response", jsonError);
         setMessages(prev => [...prev, { role: "assistant", content: "Error: Received an invalid response from the server. Please try again." }]);
         setLoading(false);
         return;
@@ -601,7 +608,7 @@ export default function Dashboard() {
         saveConversation(repoContext.owner, repoContext.repo, [...messages, assistantMsg])
       }
     } catch (error: any) {
-      console.error(error)
+      logger.error("Dashboard error", error)
       setMessages(prev => [...prev, { 
         role: "assistant", 
         content: `Error: Failed to process request. ${error.message}` 
